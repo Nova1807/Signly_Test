@@ -1,23 +1,19 @@
-# Use the official Node.js runtime as the base image
-FROM node:22-alpine
-
-# Set the working directory in the container
+# Build Stage (devDependencies)
+FROM node:22-alpine AS builder
 WORKDIR /app
-
-# Copy package.json and package-lock.json
 COPY package*.json ./
-
-# Install dependencies
-RUN npm install
-
-# Copy the rest of the application code
+RUN npm ci
 COPY . .
-
-# Build the application
 RUN npm run build
 
-# Expose the port the app runs on
+# Production Stage (nur prodDependencies)
+FROM node:22-alpine AS production
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production --ignore-scripts && npm cache clean --force
+COPY --from=builder /app/dist ./dist
+# Firebase Service Account (falls benötigt)
+COPY --chown=node:node ./service-account.json ./  
+USER node
 EXPOSE 8080
-
-# Command to run the application
-CMD ["npm", "run", "start:prod"]
+CMD ["node", "dist/main"]
