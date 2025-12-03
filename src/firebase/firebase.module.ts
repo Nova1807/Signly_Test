@@ -8,11 +8,21 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
     {
       provide: 'FIREBASE_APP',
       useFactory: (configService: ConfigService) => {
-        const serviceAccount = require(configService.get('firebase.serviceAccountPath') || './signly-be33f-firebase-adminsdk-fbsvc-cd21369526.json');
-        return admin.initializeApp({
-          credential: admin.credential.cert(serviceAccount),
-          databaseURL: configService.get('firebase.databaseURL'),
-        });
+        const serviceAccountPath =
+          configService.get<string>('FIREBASE_SERVICE_ACCOUNT_KEY_PATH') ||
+          process.env.FIREBASE_SERVICE_ACCOUNT_KEY_PATH ||
+          './signly-be33f-firebase-adminsdk-fbsvc-cd21369526.json';
+
+        // @ts-ignore
+        const serviceAccount = require(serviceAccountPath);
+
+        if (!admin.apps.length) {
+          admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount),
+          });
+        }
+
+        return admin.app();
       },
       inject: [ConfigService],
     },
