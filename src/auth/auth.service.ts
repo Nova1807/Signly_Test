@@ -40,15 +40,33 @@ export class AuthService {
       const firestore = this.firebaseApp.firestore();
       this.logger.log('signup: got firestore instance');
 
-      const userRef = firestore.collection('users').where('email', '==', email);
-      const snapshot = await userRef.get();
-      this.logger.log(`signup: existing users with email=${email}: ${snapshot.size}`);
+      // 1. Email prüfen
+      const emailRef = firestore.collection('users').where('email', '==', email);
+      const emailSnapshot = await emailRef.get();
+      this.logger.log(
+        `signup: existing users with email=${email}: ${emailSnapshot.size}`,
+      );
 
-      if (!snapshot.empty) {
+      if (!emailSnapshot.empty) {
         this.logger.warn(`signup: email already in use: ${email}`);
         throw new BadRequestException('Diese Email hat bereits einen Account');
       }
 
+      // 2. Username prüfen
+      const nameRef = firestore.collection('users').where('name', '==', name);
+      const nameSnapshot = await nameRef.get();
+      this.logger.log(
+        `signup: existing users with name=${name}: ${nameSnapshot.size}`,
+      );
+
+      if (!nameSnapshot.empty) {
+        this.logger.warn(`signup: name already in use: ${name}`);
+        throw new BadRequestException(
+          'Dieser Benutzername ist bereits vergeben',
+        );
+      }
+
+      // 3. Passwort hashen & User speichern
       const hashedPassword = await bcrypt.hash(password, 10);
       this.logger.log('signup: password hashed');
 
@@ -69,18 +87,33 @@ export class AuthService {
   async login(credentials: LoginDto) {
     this.logger.log(`login start: ${JSON.stringify(credentials)}`);
 
-    const { email, password } = credentials;
+    const { identifier, password } = credentials;
 
     try {
       const firestore = this.firebaseApp.firestore();
       this.logger.log('login: got firestore instance');
 
-      const userRef = firestore.collection('users').where('email', '==', email);
-      const snapshot = await userRef.get();
-      this.logger.log(`login: users found with email=${email}: ${snapshot.size}`);
+      // Entscheiden: ist identifier eine Email?
+      const isEmail = identifier.includes('@');
+
+      // Query je nach Typ
+      const userQuery = isEmail
+        ? firestore.collection('users').where('email', '==', identifier)
+        : firestore.collection('users').where('name', '==', identifier);
+
+      const snapshot = await userQuery.get();
+      this.logger.log(
+        `login: users found with ${
+          isEmail ? 'email' : 'name'
+        }=${identifier}: ${snapshot.size}`,
+      );
 
       if (snapshot.empty) {
-        this.logger.warn(`login: no user found for email=${email}`);
+        this.logger.warn(
+          `login: no user found for ${
+            isEmail ? 'email' : 'name'
+          }=${identifier}`,
+        );
         throw new UnauthorizedException('Wrong credentials');
       }
 
@@ -94,7 +127,11 @@ export class AuthService {
       this.logger.log(`login: passwordMatch=${passwordMatch}`);
 
       if (!passwordMatch) {
-        this.logger.warn(`login: wrong password for email=${email}`);
+        this.logger.warn(
+          `login: wrong password for ${
+            isEmail ? 'email' : 'name'
+          }=${identifier}`,
+        );
         throw new UnauthorizedException('Wrong credentials');
       }
 
@@ -137,7 +174,10 @@ export class AuthService {
       this.logger.log('refreshTokens: new tokens generated');
       return tokens;
     } catch (err) {
-      this.logger.error(`refreshTokens internal error: ${err?.message}`, err?.stack);
+      this.logger.error(
+        `refreshTokens internal error: ${err?.message}`,
+        err?.stack,
+      );
       throw err;
     }
   }
