@@ -19,12 +19,17 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
             projectId,
           });
 
-          // Falls du sicherstellen willst, dass die Standard-DB verwendet wird:
-          admin.firestore().settings({
-            databaseId: '(default)',
+          const fs = admin.firestore();
+          console.log('FIREBASE INIT', {
+            projectId: admin.app().options.projectId,
+            // interne Info, um zu sehen welche DB genutzt wird
+            databaseId: (fs as any)._databaseId,
           });
 
-          console.log('FIREBASE INIT', { projectId });
+          // Falls du ausdrücklich die Default-DB erzwingen willst:
+          fs.settings({
+            databaseId: '(default)',
+          });
         }
 
         return admin.app();

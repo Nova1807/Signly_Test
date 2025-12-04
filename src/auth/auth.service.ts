@@ -21,6 +21,14 @@ export class AuthService {
     private jwtService: JwtService,
   ) {
     this.logger.log('AuthService constructed');
+    const fs = this.firebaseApp.firestore();
+    this.logger.log(
+      'AuthService firestore config: ' +
+        JSON.stringify({
+          projectId: this.firebaseApp.options.projectId,
+          databaseId: (fs as any)._databaseId,
+        }),
+    );
   }
 
   async signup(signupData: SignupDto) {
@@ -78,7 +86,9 @@ export class AuthService {
 
       const userDoc = snapshot.docs[0];
       const user = userDoc.data();
-      this.logger.log(`login: userDoc id=${userDoc.id}`);
+      this.logger.log(
+        `login: userDoc id=${userDoc.id}, user=${JSON.stringify(user)}`,
+      );
 
       const passwordMatch = await bcrypt.compare(password, user.password);
       this.logger.log(`login: passwordMatch=${passwordMatch}`);
@@ -119,7 +129,9 @@ export class AuthService {
 
       const tokenDoc = snapshot.docs[0];
       const token = tokenDoc.data();
-      this.logger.log(`refreshTokens: tokenDoc id=${tokenDoc.id}, userId=${token.userId}`);
+      this.logger.log(
+        `refreshTokens: tokenDoc id=${tokenDoc.id}, userId=${token.userId}`,
+      );
 
       const tokens = await this.generateUserToken(token.userId);
       this.logger.log('refreshTokens: new tokens generated');

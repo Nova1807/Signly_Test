@@ -1,4 +1,9 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Logger } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Logger,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
@@ -40,7 +45,9 @@ export class AuthController {
   async refreshtoken(@Body() refreshtokenDto: RefreshTokenDto) {
     this.logger.log(`refresh called with body: ${JSON.stringify(refreshtokenDto)}`);
     try {
-      const result = await this.authService.refreshTokens(refreshtokenDto.refreshToken);
+      const result = await this.authService.refreshTokens(
+        refreshtokenDto.refreshToken,
+      );
       this.logger.log('refresh finished successfully');
       return result;
     } catch (err) {
