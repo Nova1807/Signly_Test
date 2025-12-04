@@ -1,26 +1,51 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Logger } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { CreateAuthDto } from './dto/create-auth.dto';
-import { UpdateAuthDto } from './dto/update-auth.dto';
-import { SignupDto } from "./dto/signup.dto";
-import {LoginDto} from "./dto/login.dto";
+import { SignupDto } from './dto/signup.dto';
+import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 
 @Controller('auth')
 export class AuthController {
-    constructor(private readonly authService: AuthService) {
-    }
+  private readonly logger = new Logger(AuthController.name);
 
-    @Post('signup')
-    async signUp(@Body() signupData:SignupDto ){
-        return this.authService.signup(signupData);
+  constructor(private readonly authService: AuthService) {}
+
+  @Post('signup')
+  async signUp(@Body() signupData: SignupDto) {
+    this.logger.log(`signup called with body: ${JSON.stringify(signupData)}`);
+    try {
+      const result = await this.authService.signup(signupData);
+      this.logger.log('signup finished successfully');
+      return result;
+    } catch (err) {
+      this.logger.error(`signup error: ${err?.message}`, err?.stack);
+      throw err;
     }
-    @Post('login')
-    async login(@Body() credentials: LoginDto) {
-        return this.authService.login(credentials);
+  }
+
+  @Post('login')
+  async login(@Body() credentials: LoginDto) {
+    this.logger.log(`login called with body: ${JSON.stringify(credentials)}`);
+    try {
+      const result = await this.authService.login(credentials);
+      this.logger.log('login finished successfully');
+      return result;
+    } catch (err) {
+      this.logger.error(`login error: ${err?.message}`, err?.stack);
+      throw err;
     }
-    @Post('refresh')
-    async refreshtoken(@Body() refreshtokenDto: RefreshTokenDto){
-        return this.authService.refreshTokens(refreshtokenDto.refreshToken);
+  }
+
+  @Post('refresh')
+  async refreshtoken(@Body() refreshtokenDto: RefreshTokenDto) {
+    this.logger.log(`refresh called with body: ${JSON.stringify(refreshtokenDto)}`);
+    try {
+      const result = await this.authService.refreshTokens(refreshtokenDto.refreshToken);
+      this.logger.log('refresh finished successfully');
+      return result;
+    } catch (err) {
+      this.logger.error(`refresh error: ${err?.message}`, err?.stack);
+      throw err;
     }
+  }
 }

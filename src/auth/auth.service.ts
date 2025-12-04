@@ -1,87 +1,161 @@
-import {BadRequestException, Injectable, UnauthorizedException, Inject} from '@nestjs/common';
-import { CreateAuthDto } from './dto/create-auth.dto';
-import { UpdateAuthDto } from './dto/update-auth.dto';
-import {SignupDto} from "./dto/signup.dto";
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+  Inject,
+  Logger,
+} from '@nestjs/common';
+import { SignupDto } from './dto/signup.dto';
 import * as admin from 'firebase-admin';
 import * as bcrypt from 'bcrypt';
-import {LoginDto} from "./dto/login.dto";
+import { LoginDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
-import {v4 as uuidv4} from 'uuid';
+import { v4 as uuidv4 } from 'uuid';
+
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
 
-    constructor(
-        @Inject('FIREBASE_APP') private firebaseApp: admin.app.App,
-        private jwtService: JwtService,
-    ){}
+  constructor(
+    @Inject('FIREBASE_APP') private firebaseApp: admin.app.App,
+    private jwtService: JwtService,
+  ) {
+    this.logger.log('AuthService constructed');
+  }
 
- async signup(signupData: SignupDto) {
+  async signup(signupData: SignupDto) {
+    this.logger.log(`signup start: ${JSON.stringify(signupData)}`);
 
-        const {email, password, name} = signupData;
+    const { email, password, name } = signupData;
 
-        const firestore = this.firebaseApp.firestore();
-        const userRef = firestore.collection('users').where('email', '==', email);
-        const snapshot = await userRef.get();
-        if (!snapshot.empty) {
-            throw new BadRequestException('Diese Email hat bereits einen Account')
-        }
+    try {
+      const firestore = this.firebaseApp.firestore();
+      this.logger.log('signup: got firestore instance');
 
-        const hashedPassword = await bcrypt.hash(password, 10);
+      const userRef = firestore.collection('users').where('email', '==', email);
+      const snapshot = await userRef.get();
+      this.logger.log(`signup: existing users with email=${email}: ${snapshot.size}`);
 
-        await firestore.collection('users').add({
-            name,
-            email,
-            password: hashedPassword,
-        });
+      if (!snapshot.empty) {
+        this.logger.warn(`signup: email already in use: ${email}`);
+        throw new BadRequestException('Diese Email hat bereits einen Account');
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      this.logger.log('signup: password hashed');
+
+      await firestore.collection('users').add({
+        name,
+        email,
+        password: hashedPassword,
+      });
+
+      this.logger.log('signup: user document created');
+      return { success: true };
+    } catch (err) {
+      this.logger.error(`signup internal error: ${err?.message}`, err?.stack);
+      throw err;
     }
-    async login(credentials: LoginDto){
-        const{ email, password} = credentials;
-        const firestore = this.firebaseApp.firestore();
-        const userRef = firestore.collection('users').where('email', '==', email);
-        const snapshot = await userRef.get();
-        if (snapshot.empty) {
-            throw new UnauthorizedException('Wrong credentials');
-        }
-        const userDoc = snapshot.docs[0];
-        const user = userDoc.data();
+  }
 
-        const passwordMatch = await bcrypt.compare(password, user.password);
-        if(!passwordMatch){
-            throw new UnauthorizedException('Wrong credentials');
-        }
-        return this.generateUserToken(userDoc.id);
+  async login(credentials: LoginDto) {
+    this.logger.log(`login start: ${JSON.stringify(credentials)}`);
+
+    const { email, password } = credentials;
+
+    try {
+      const firestore = this.firebaseApp.firestore();
+      this.logger.log('login: got firestore instance');
+
+      const userRef = firestore.collection('users').where('email', '==', email);
+      const snapshot = await userRef.get();
+      this.logger.log(`login: users found with email=${email}: ${snapshot.size}`);
+
+      if (snapshot.empty) {
+        this.logger.warn(`login: no user found for email=${email}`);
+        throw new UnauthorizedException('Wrong credentials');
+      }
+
+      const userDoc = snapshot.docs[0];
+      const user = userDoc.data();
+      this.logger.log(`login: userDoc id=${userDoc.id}`);
+
+      const passwordMatch = await bcrypt.compare(password, user.password);
+      this.logger.log(`login: passwordMatch=${passwordMatch}`);
+
+      if (!passwordMatch) {
+        this.logger.warn(`login: wrong password for email=${email}`);
+        throw new UnauthorizedException('Wrong credentials');
+      }
+
+      const tokens = await this.generateUserToken(userDoc.id);
+      this.logger.log('login: tokens generated');
+      return tokens;
+    } catch (err) {
+      this.logger.error(`login internal error: ${err?.message}`, err?.stack);
+      throw err;
     }
+  }
 
-    async refreshTokens(refreshToken: string){
-        const firestore = this.firebaseApp.firestore();
-        const tokenRef = firestore.collection('refreshTokens').where('token', '==', refreshToken).where('expiryDate', '>=', new Date());
-        const snapshot = await tokenRef.get();
-        if (snapshot.empty) {
-            throw new UnauthorizedException();
-        }
-        const tokenDoc = snapshot.docs[0];
-        const token = tokenDoc.data();
-        return this.generateUserToken(token.userId);
+  async refreshTokens(refreshToken: string) {
+    this.logger.log(`refreshTokens start: token=${refreshToken}`);
+
+    try {
+      const firestore = this.firebaseApp.firestore();
+      this.logger.log('refreshTokens: got firestore instance');
+
+      const tokenRef = firestore
+        .collection('refreshTokens')
+        .where('token', '==', refreshToken)
+        .where('expiryDate', '>=', new Date());
+
+      const snapshot = await tokenRef.get();
+      this.logger.log(`refreshTokens: tokens found=${snapshot.size}`);
+
+      if (snapshot.empty) {
+        this.logger.warn('refreshTokens: token not found or expired');
+        throw new UnauthorizedException();
+      }
+
+      const tokenDoc = snapshot.docs[0];
+      const token = tokenDoc.data();
+      this.logger.log(`refreshTokens: tokenDoc id=${tokenDoc.id}, userId=${token.userId}`);
+
+      const tokens = await this.generateUserToken(token.userId);
+      this.logger.log('refreshTokens: new tokens generated');
+      return tokens;
+    } catch (err) {
+      this.logger.error(`refreshTokens internal error: ${err?.message}`, err?.stack);
+      throw err;
     }
+  }
 
+  async generateUserToken(userId: string) {
+    this.logger.log(`generateUserToken start: userId=${userId}`);
 
+    const accessToken = this.jwtService.sign({ userId }, { expiresIn: '1h' });
+    const refreshToken = uuidv4();
+    this.logger.log('generateUserToken: tokens created');
 
-    async generateUserToken(userId){
+    await this.storeRefreshToken(refreshToken, userId);
+    this.logger.log('generateUserToken: refresh token stored');
 
-        const accessToken = this.jwtService.sign({userId}, {expiresIn :'1h'});
-        const refreshToken = uuidv4();
+    return {
+      accessToken,
+      refreshToken,
+    };
+  }
 
-        await this.storeRefreshToken(refreshToken, userId);
-        return{
-            accessToken,
-            refreshToken
-        }
-    }
-    async storeRefreshToken(token: string, userId){
-        const expiryDate = new Date();
-        expiryDate.setDate(expiryDate.getDate()+3);
+  async storeRefreshToken(token: string, userId: string) {
+    this.logger.log(`storeRefreshToken start: userId=${userId}`);
 
-        const firestore = this.firebaseApp.firestore();
-        await firestore.collection('refreshTokens').add({token, userId, expiryDate});
-    }
+    const expiryDate = new Date();
+    expiryDate.setDate(expiryDate.getDate() + 3);
+
+    const firestore = this.firebaseApp.firestore();
+    this.logger.log('storeRefreshToken: got firestore instance');
+
+    await firestore.collection('refreshTokens').add({ token, userId, expiryDate });
+    this.logger.log('storeRefreshToken: refresh token document created');
+  }
 }
