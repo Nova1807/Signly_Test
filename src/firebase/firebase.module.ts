@@ -11,8 +11,11 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
         if (!admin.apps.length) {
           const projectId =
             configService.get<string>('FIREBASE_PROJECT_ID') ||
-            configService.get<string>('PROJECT_ID') ||
-            'signly-be33f'; // hier dein GCP/Firebase-Projekt eintragen
+            'signly-be33f'; // Projekt-ID aus der URL
+
+          const databaseId =
+            configService.get<string>('FIRESTORE_DATABASE_ID') ||
+            'signlydb'; // HIER deine DB-ID aus der UI
 
           admin.initializeApp({
             credential: admin.credential.applicationDefault(),
@@ -20,15 +23,15 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
           });
 
           const fs = admin.firestore();
-          console.log('FIREBASE INIT', {
-            projectId: admin.app().options.projectId,
-            // interne Info, um zu sehen welche DB genutzt wird
-            databaseId: (fs as any)._databaseId,
+
+          // WICHTIG: explizit deine Enterprise-DB setzen
+          fs.settings({
+            databaseId,
           });
 
-          // Falls du ausdrücklich die Default-DB erzwingen willst:
-          fs.settings({
-            databaseId: '(default)',
+          console.log('FIREBASE INIT', {
+            projectId: admin.app().options.projectId,
+            databaseId: (fs as any)._databaseId,
           });
         }
 
