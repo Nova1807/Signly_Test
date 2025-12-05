@@ -47,7 +47,9 @@ export class AuthController {
 
   @Post('refresh')
   async refreshtoken(@Body() refreshtokenDto: RefreshTokenDto) {
-    this.logger.log(`refresh called with body: ${JSON.stringify(refreshtokenDto)}`);
+    this.logger.log(
+      `refresh called with body: ${JSON.stringify(refreshtokenDto)}`,
+    );
     try {
       const result = await this.authService.refreshTokens(
         refreshtokenDto.refreshToken,
@@ -63,29 +65,54 @@ export class AuthController {
   @Get('verify')
   async verify(@Query('token') token: string, @Res() res: Response) {
     this.logger.log(`VERIFY ENDPOINT CALLED with token: ${token}`);
-    
+
     if (!token || token.trim() === '') {
       this.logger.warn('verify: empty token provided');
-      return this.renderErrorPage(res, 'KEIN_TOKEN', 'Kein Verifizierungstoken gefunden.');
+      return this.renderErrorPage(
+        res,
+        'KEIN_TOKEN',
+        'Kein Verifizierungstoken gefunden.',
+      );
     }
-    
+
     try {
-      this.logger.log(`verify: calling authService.verifyEmailToken('${token}')`);
+      this.logger.log(
+        `verify: calling authService.verifyEmailToken('${token}')`,
+      );
       const result = await this.authService.verifyEmailToken(token);
-      
+
       this.logger.log(`verify: result: ${JSON.stringify(result)}`);
-      
+
+      // 1. Wenn wirklich success true -> klassische Erfolgsseite
       if (result.success) {
-        // ERFOLG: Account wurde erstellt
-        return this.renderSuccessPage(res, result.email || '', result.name || '');
-      } else {
-        // FEHLER: Zeige entsprechende Fehlerseite
-        return this.renderErrorPage(res, result.error || 'UNKNOWN_ERROR', result.message, result.email);
+        return this.renderSuccessPage(
+          res,
+          result.email || '',
+          result.name || '',
+        );
       }
-      
+
+      // 2. Wenn kein success, aber eine Email zurückkommt,
+      //    gehen wir davon aus: Account existiert / wurde angelegt.
+      if (result.email) {
+        const name = result.name || 'Nutzer';
+        return this.renderSuccessPage(res, result.email, name);
+      }
+
+      // 3. Nur wenn weder success noch email -> Fehlerseite
+      return this.renderErrorPage(
+        res,
+        result.error || 'UNKNOWN_ERROR',
+        result.message,
+        result.email,
+      );
     } catch (err) {
       this.logger.error(`verify ERROR: ${err?.message}`, err?.stack);
-      return this.renderErrorPage(res, 'UNKNOWN_ERROR', 'Unbekannter Fehler aufgetreten.');
+      return this.renderErrorPage(
+        res,
+        'UNKNOWN_ERROR',
+        'Unbekannter Fehler aufgetreten.',
+      );
     }
   }
 
@@ -169,13 +196,13 @@ export class AuthController {
           <h1>Email erfolgreich verifiziert!</h1>
           
           <div class="user-info">
-            <p><strong>Ihr Account wurde erfolgreich erstellt:</strong></p>
+            <p><strong>Ihr Account wurde erfolgreich erstellt oder ist bereits vorhanden:</strong></p>
             <p><strong>Name:</strong> ${name}</p>
             <p><strong>Email:</strong> ${email}</p>
           </div>
           
-          <p>Ihr Account wurde aktiviert und ist jetzt bereit zur Nutzung.</p>
-          <p>Sie können sich jetzt mit Ihren Zugangsdaten einloggen.</p>
+          <p>Ihr Account ist jetzt bereit zur Nutzung.</p>
+          <p>Sie können sich nun mit Ihren Zugangsdaten einloggen.</p>
           
           <a href="/login" class="login-btn">Zum Login</a>
           
@@ -185,7 +212,6 @@ export class AuthController {
         </div>
         
         <script>
-          // Automatische Weiterleitung nach 5 Sekunden
           setTimeout(function() {
             window.location.href = '/login';
           }, 5000);
@@ -193,27 +219,32 @@ export class AuthController {
       </body>
       </html>
     `;
-    
     return res.send(html);
   }
 
-  private renderErrorPage(res: Response, errorCode: string, errorMessage: string, email?: string) {
+  private renderErrorPage(
+    res: Response,
+    errorCode: string,
+    errorMessage: string,
+    email?: string,
+  ) {
     let title = 'Verifizierung fehlgeschlagen';
     let details = errorMessage;
     let showLoginButton = true;
     let showRegisterButton = true;
-    
-    switch(errorCode) {
+
+    switch (errorCode) {
       case 'TOKEN_EXPIRED':
         title = 'Link abgelaufen';
-        details = 'Der Verifizierungslink ist abgelaufen (gültig für 15 Minuten).';
+        details =
+          'Der Verifizierungslink ist abgelaufen (gültig für 15 Minuten).';
         showLoginButton = false;
         break;
       case 'EMAIL_ALREADY_REGISTERED':
         title = 'Email bereits registriert';
-        details = email ? 
-          `Die Email <strong>${email}</strong> ist bereits registriert.` : 
-          'Diese Email ist bereits registriert.';
+        details = email
+          ? `Die Email <strong>${email}</strong> ist bereits registriert.`
+          : 'Diese Email ist bereits registriert.';
         details += ' Sie können sich mit Ihren Zugangsdaten einloggen.';
         showRegisterButton = false;
         break;
@@ -229,14 +260,15 @@ export class AuthController {
         break;
       case 'SERVER_ERROR':
         title = 'Server Fehler';
-        details = 'Ein Serverfehler ist aufgetreten. Bitte versuchen Sie es später erneut.';
+        details =
+          'Ein Serverfehler ist aufgetreten. Bitte versuchen Sie es später erneut.';
         break;
       case 'KEIN_TOKEN':
         title = 'Kein Token';
         details = 'Es wurde kein Verifizierungstoken gefunden.';
         break;
     }
-    
+
     const html = `
       <!DOCTYPE html>
       <html lang="de">
@@ -338,7 +370,7 @@ export class AuthController {
       </body>
       </html>
     `;
-    
+
     return res.status(400).send(html);
   }
 }
