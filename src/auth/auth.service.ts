@@ -22,10 +22,6 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
-  /**
-   * Signup: erstellt ein emailVerifications-Dokument mit token als ID.
-   * Der Name wird robust extrahiert (name | username | displayName).
-   */
   async signup(signupData: SignupDto) {
     this.logger.log(`signup start: ${JSON.stringify(signupData)}`);
 
@@ -108,6 +104,7 @@ export class AuthService {
       this.logger.log(`signup: token expires at ${expiresAt.toISOString()}`);
       this.logger.log(`signup: server time: ${createdAt.toISOString()}`);
 
+      // Token wird in emailVerifications gespeichert, aber NICHT gelöscht
       await firestore.collection('emailVerifications').doc(token).set({
         email,
         password: hashedPassword,
@@ -264,8 +261,9 @@ export class AuthService {
   }
 
   /**
-   * verifyEmailToken: validiert Token-Dokument, erstellt User und gibt email zurück.
-   * Ablaufprüfung kann im Service bleiben, Controller prüft aber zusätzlich.
+   * verifyEmailToken:
+   * Erwartet, dass der Controller bereits geprüft hat, ob der Token abgelaufen ist.
+   * Hier wird NUR noch der User angelegt oder gefunden.
    */
   async verifyEmailToken(token: string): Promise<{
     success: boolean;
@@ -279,25 +277,13 @@ export class AuthService {
     const firestore = this.firebaseApp.firestore();
 
     try {
-      let decodedToken = token;
-      try {
-        decodedToken = decodeURIComponent(token);
-      } catch {
-        // ignore decode errors
-      }
-
-      let docRef = firestore.collection('emailVerifications').doc(decodedToken);
-      let doc = await docRef.get();
-
-      if (!doc.exists && decodedToken !== token) {
-        docRef = firestore.collection('emailVerifications').doc(token);
-        doc = await docRef.get();
-      }
+      const docRef = firestore.collection('emailVerifications').doc(token);
+      const doc = await docRef.get();
 
       if (!doc.exists) {
         this.logger.error(`verifyEmailToken: document not found for token`);
         return {
-          success: true,
+          success: false,
           error: 'INVALID_TOKEN',
           message: 'Ungültiger oder abgelaufener Token',
           email: '',
@@ -307,9 +293,8 @@ export class AuthService {
       const tokenData = doc.data() as any;
       if (!tokenData) {
         this.logger.warn(`verifyEmailToken: document has no data`);
-        await docRef.delete().catch(() => {});
         return {
-          success: true,
+          success: false,
           error: 'INVALID_TOKEN_DATA',
           message: 'Ungültige Token-Daten',
           email: '',
@@ -324,44 +309,10 @@ export class AuthService {
         `verifyEmailToken: tokenData.email='${email}'`,
       );
 
-      const now = new Date();
-      let expiresAt: Date;
-
-      if (
-        tokenData.expiresAt &&
-        typeof tokenData.expiresAt.toDate === 'function'
-      ) {
-        expiresAt = tokenData.expiresAt.toDate();
-      } else if (tokenData.expiresAt instanceof Date) {
-        expiresAt = tokenData.expiresAt;
-      } else if (typeof tokenData.expiresAt === 'string') {
-        expiresAt = new Date(tokenData.expiresAt);
-      } else {
-        await docRef.delete().catch(() => {});
-        return {
-          success: true,
-          error: 'INVALID_TOKEN_FORMAT',
-          message: 'Ungültiges Token-Format',
-          email,
-        };
-      }
-
-      if (expiresAt.getTime() < now.getTime()) {
-        this.logger.warn(`verifyEmailToken: token expired`);
-        await docRef.delete().catch(() => {});
-        return {
-          success: true,
-          error: 'TOKEN_EXPIRED',
-          message: 'Token abgelaufen',
-          email,
-        };
-      }
-
       if (!email || !password) {
         this.logger.warn(`verifyEmailToken: missing required fields`);
-        await docRef.delete().catch(() => {});
         return {
-          success: true,
+          success: false,
           error: 'MISSING_FIELDS',
           message: 'Fehlende Benutzerdaten',
           email: email || '',
@@ -378,7 +329,6 @@ export class AuthService {
           `verifyEmailToken: user already exists for email: ${email}`,
         );
         const existingUser = userQuery.docs[0];
-        docRef.delete().catch(() => {});
         return {
           success: true,
           message: 'Account existiert und ist verifiziert.',
@@ -402,7 +352,7 @@ export class AuthService {
         `verifyEmailToken: user created with ID: ${userRef.id}`,
       );
 
-      docRef.delete().catch(() => {});
+      // Token bleibt erhalten, wird NICHT gelöscht
 
       return {
         success: true,
@@ -413,7 +363,7 @@ export class AuthService {
     } catch (err) {
       this.logger.error(`verifyEmailToken ERROR: ${err?.message}`, err?.stack);
       return {
-        success: true,
+        success: false,
         error: 'SERVER_ERROR',
         message: 'Server Fehler',
         email: '',
@@ -421,9 +371,6 @@ export class AuthService {
     }
   }
 
-  /**
-   * sendVerificationEmail: sendet die E-Mail, hängt token und name als query param an die URL
-   */
   private async sendVerificationEmail(
     email: string,
     token: string,

@@ -80,75 +80,65 @@ export class AuthController {
     const decodedName = nameQuery ? decodeURIComponent(nameQuery).trim() : '';
     const fallbackName = decodedName || 'Nutzer';
 
-    if ((!token || token.trim() === '') && !decodedName) {
-      this.logger.warn('verify: empty token and empty name provided');
-      return this.renderSuccessPage(res, 'Nutzer');
+    if (!token || token.trim() === '') {
+      this.logger.warn('verify: empty token provided');
+      return this.renderExpiredPage(res);
     }
 
     try {
-      if (token && token.trim() !== '') {
-        const firestore = this.firebaseApp.firestore();
+      const firestore = this.firebaseApp.firestore();
 
-        // emailVerifications-Dokument direkt lesen
-        const docRef = firestore.collection('emailVerifications').doc(token);
-        const doc = await docRef.get();
+      // 1) Token-Dokument holen
+      const docRef = firestore.collection('emailVerifications').doc(token);
+      const doc = await docRef.get();
 
-        if (!doc.exists) {
-          this.logger.warn('verify: emailVerifications doc not found');
-          return this.renderExpiredPage(res);
-        }
-
-        const data = doc.data() as any;
-        if (!data || !data.expiresAt) {
-          this.logger.warn('verify: emailVerifications doc has no expiresAt');
-          return this.renderExpiredPage(res);
-        }
-
-        const expiresAt: Date =
-          typeof data.expiresAt.toDate === 'function'
-            ? data.expiresAt.toDate()
-            : new Date(data.expiresAt);
-
-        const now = new Date();
-        this.logger.log(
-          `verify: expiresAt=${expiresAt.toISOString()}, now=${now.toISOString()}`,
-        );
-
-        if (expiresAt.getTime() < now.getTime()) {
-          this.logger.log('verify: token expired (controller check)');
-          return this.renderExpiredPage(res);
-        }
-
-        // Token ist noch gültig => jetzt Service aufrufen, der User anlegt
-        this.logger.log(
-          `verify: token still valid, calling authService.verifyEmailToken('${token}')`,
-        );
-        const result = await this.authService.verifyEmailToken(token);
-        this.logger.log(`verify: result: ${JSON.stringify(result)}`);
-
-        // Falls Service einen harten Fehler liefert, trotzdem Error-Seite
-        if (result.error && result.error !== 'TOKEN_EXPIRED') {
-          this.logger.warn(
-            `verify: service returned error='${result.error}', rendering expired page`,
-          );
-          return this.renderExpiredPage(res);
-        }
-
-        const userName = fallbackName;
-        this.logger.log(
-          `verify: rendering success page with userName='${userName}'`,
-        );
-        return this.renderSuccessPage(res, userName);
+      if (!doc.exists) {
+        this.logger.warn('verify: emailVerifications doc not found');
+        return this.renderExpiredPage(res);
       }
 
-      if (decodedName) {
-        this.logger.log(
-          `verify: no token, using decodedName from query: '${decodedName}'`,
-        );
-        return this.renderSuccessPage(res, decodedName);
+      const data = doc.data() as any;
+      if (!data || !data.expiresAt) {
+        this.logger.warn('verify: emailVerifications doc has no expiresAt');
+        return this.renderExpiredPage(res);
       }
 
-      return this.renderSuccessPage(res, 'Nutzer');
+      // 2) Ablauf prüfen
+      const expiresAt: Date =
+        typeof data.expiresAt.toDate === 'function'
+          ? data.expiresAt.toDate()
+          : new Date(data.expiresAt);
+
+      const now = new Date();
+      this.logger.log(
+        `verify: expiresAt=${expiresAt.toISOString()}, now=${now.toISOString()}`,
+      );
+
+      if (expiresAt.getTime() < now.getTime()) {
+        this.logger.log('verify: token expired (controller check)');
+        return this.renderExpiredPage(res);
+      }
+
+      // 3) Token ist noch gültig -> User anlegen / verifizieren
+      this.logger.log(
+        `verify: token still valid, calling authService.verifyEmailToken('${token}')`,
+      );
+      const result = await this.authService.verifyEmailToken(token);
+      this.logger.log(`verify: result: ${JSON.stringify(result)}`);
+
+      if (!result.success) {
+        this.logger.warn(
+          `verify: service returned error='${result.error}', rendering expired page`,
+        );
+        return this.renderExpiredPage(res);
+      }
+
+      // 4) Erfolg: Seite mit Namen aus Query-Param
+      const userName = fallbackName;
+      this.logger.log(
+        `verify: rendering success page with userName='${userName}'`,
+      );
+      return this.renderSuccessPage(res, userName);
     } catch (err) {
       this.logger.error(`verify ERROR: ${err?.message}`, err?.stack);
       return this.renderExpiredPage(res);
