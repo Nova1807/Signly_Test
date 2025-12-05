@@ -63,31 +63,48 @@ export class AuthController {
   }
 
   @Get('verify')
-  async verify(@Query('token') token: string, @Query('name') nameQuery: string | undefined, @Res() res: Response) {
-    this.logger.log(`VERIFY ENDPOINT CALLED with token: ${token}, nameQuery: ${nameQuery}`);
+  async verify(
+    @Query('token') token: string,
+    @Query('name') nameQuery: string | undefined,
+    @Res() res: Response,
+  ) {
+    this.logger.log(
+      `VERIFY ENDPOINT CALLED with token: ${token}, nameQuery: ${nameQuery}`,
+    );
 
+    const fallbackName = (nameQuery || '').trim() || 'Nutzer';
+
+    // Wenn weder Token noch Name da sind: direkt Fallback anzeigen
     if ((!token || token.trim() === '') && (!nameQuery || nameQuery.trim() === '')) {
       this.logger.warn('verify: empty token and empty name provided');
       return this.renderSuccessPage(res, 'Nutzer');
     }
 
     try {
-      // Wenn token vorhanden, rufe verifyEmailToken auf
       if (token && token.trim() !== '') {
-        this.logger.log(`verify: calling authService.verifyEmailToken('${token}')`);
+        this.logger.log(
+          `verify: calling authService.verifyEmailToken('${token}')`,
+        );
         const result = await this.authService.verifyEmailToken(token);
         this.logger.log(`verify: result: ${JSON.stringify(result)}`);
 
-        // result.name ist bereits robust aufbereitet im Service
-        const userName = (result.name || '').trim() || 'Nutzer';
-        this.logger.log(`verify: displaying name from token: ${userName}`);
+        // Priorität: result.name -> nameQuery -> "Nutzer"
+        const userName =
+          (result.name && result.name.trim()) ||
+          fallbackName;
+
+        this.logger.log(
+          `verify: displaying userName='${userName}' (result.name='${result.name}', nameQuery='${nameQuery}')`,
+        );
         return this.renderSuccessPage(res, userName);
       }
 
       // Falls kein token, aber name als query param (fallback), nutze diesen
       if (nameQuery && nameQuery.trim() !== '') {
         const userName = nameQuery.trim();
-        this.logger.log(`verify: displaying name from query param: ${userName}`);
+        this.logger.log(
+          `verify: displaying name from query param: ${userName}`,
+        );
         return this.renderSuccessPage(res, userName);
       }
 
@@ -95,12 +112,15 @@ export class AuthController {
       return this.renderSuccessPage(res, 'Nutzer');
     } catch (err) {
       this.logger.error(`verify ERROR: ${err?.message}`, err?.stack);
-      return this.renderSuccessPage(res, 'Nutzer');
+      return this.renderSuccessPage(res, fallbackName);
     }
   }
 
   private renderSuccessPage(res: Response, name: string) {
-    const safeName = (name || '').toString().replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const safeName = (name || '')
+      .toString()
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
     const html = `
       <!DOCTYPE html>
       <html lang="de">

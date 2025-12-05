@@ -36,7 +36,8 @@ export class AuthService {
       (signupData && (signupData as any).username) ||
       (signupData && (signupData as any).displayName) ||
       '';
-    const name = (typeof rawNameFromDto === 'string' ? rawNameFromDto.trim() : '').trim();
+    const name =
+      (typeof rawNameFromDto === 'string' ? rawNameFromDto.trim() : '').trim();
 
     const { email, password } = signupData as any;
 
@@ -50,7 +51,9 @@ export class AuthService {
       throw new BadRequestException('Passwort ist erforderlich');
     }
     if (!name) {
-      this.logger.warn(`signup: missing name (raw: ${JSON.stringify(rawNameFromDto)})`);
+      this.logger.warn(
+        `signup: missing name (raw: ${JSON.stringify(rawNameFromDto)})`,
+      );
       throw new BadRequestException('Name ist erforderlich');
     }
 
@@ -107,7 +110,9 @@ export class AuthService {
       this.logger.log(`signup: creating token ${token}`);
       this.logger.log(`signup: token expires at ${expiresAt.toISOString()}`);
       this.logger.log(`signup: server time: ${createdAt.toISOString()}`);
-      this.logger.log(`signup: storing name='${name}' for email='${email}'`);
+      this.logger.log(
+        `signup: storing name='${name}' for email='${email}'`,
+      );
 
       // Speichere explizit den getrimmten Namen
       await firestore.collection('emailVerifications').doc(token).set({
@@ -145,7 +150,8 @@ export class AuthService {
       const firestore = this.firebaseApp.firestore();
       this.logger.log('login: got firestore instance');
 
-      const isEmail = typeof identifier === 'string' && identifier.includes('@');
+      const isEmail =
+        typeof identifier === 'string' && identifier.includes('@');
 
       const userQuery = isEmail
         ? firestore.collection('users').where('email', '==', identifier)
@@ -323,16 +329,20 @@ export class AuthService {
       }
 
       // robustes Auslesen von email und name (verschiedene keys möglich)
-      const email: string = (tokenData.email && String(tokenData.email)) || '';
+      const email: string =
+        (tokenData.email && String(tokenData.email)) || '';
       const rawNameFromToken =
         (tokenData.name && String(tokenData.name)) ||
         (tokenData.username && String(tokenData.username)) ||
         (tokenData.displayName && String(tokenData.displayName)) ||
         '';
-      const name: string = (rawNameFromToken && rawNameFromToken.trim()) || 'Nutzer';
+      const name: string =
+        (rawNameFromToken && rawNameFromToken.trim()) || 'Nutzer';
       const password = tokenData.password;
 
-      this.logger.log(`verifyEmailToken: tokenData.email='${email}', tokenData.name='${rawNameFromToken}' -> resolved name='${name}'`);
+      this.logger.log(
+        `verifyEmailToken: tokenData.email='${email}', tokenData.name='${rawNameFromToken}' -> resolved name='${name}'`,
+      );
 
       const now = new Date();
       let expiresAt: Date;
@@ -401,7 +411,9 @@ export class AuthService {
         };
       }
 
-      this.logger.log(`verifyEmailToken: creating user for email: ${email} with name='${name}'`);
+      this.logger.log(
+        `verifyEmailToken: creating user for email: ${email} with name='${name}'`,
+      );
       const userRef = await firestore.collection('users').add({
         name,
         email,
@@ -440,8 +452,14 @@ export class AuthService {
   /**
    * sendVerificationEmail: sendet die E-Mail, hängt token und optional name als query param an die URL
    */
-  private async sendVerificationEmail(email: string, token: string, name?: string) {
-    this.logger.log(`sendVerificationEmail start: email=${email}, name='${name || ''}'`);
+  private async sendVerificationEmail(
+    email: string,
+    token: string,
+    name?: string,
+  ) {
+    this.logger.log(
+      `sendVerificationEmail start: email=${email}, name='${name || ''}'`,
+    );
 
     const encodedToken = encodeURIComponent(token);
     const encodedName = encodeURIComponent(name || '');
@@ -464,7 +482,9 @@ export class AuthService {
 
     // Hänge den Namen optional als Query-Param an (hilft, falls token nicht gelesen werden kann)
     const baseVerifyUrl = `https://signly-test-346744939652.europe-west1.run.app/auth/verify`;
-    const verifyUrl = `${baseVerifyUrl}?token=${encodedToken}${encodedName ? `&name=${encodedName}` : ''}`;
+    const verifyUrl = `${baseVerifyUrl}?token=${encodedToken}${
+      encodedName ? `&name=${encodedName}` : ''
+    }`;
     this.logger.log(`sendVerificationEmail: verify URL: ${verifyUrl}`);
 
     const mailOptions = {
