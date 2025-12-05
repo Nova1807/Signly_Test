@@ -22,10 +22,37 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
+  /**
+   * Signup: erstellt ein emailVerifications-Dokument mit token als ID.
+   * Der Name wird robust extrahiert (name | username | displayName).
+   * Wenn kein Name vorhanden ist, wird ein BadRequest geworfen.
+   */
   async signup(signupData: SignupDto) {
     this.logger.log(`signup start: ${JSON.stringify(signupData)}`);
 
-    const { email, password, name } = signupData;
+    // robustes Name-Handling: fallback keys falls frontend andere property benutzt
+    const rawNameFromDto =
+      (signupData && (signupData as any).name) ||
+      (signupData && (signupData as any).username) ||
+      (signupData && (signupData as any).displayName) ||
+      '';
+    const name = (typeof rawNameFromDto === 'string' ? rawNameFromDto.trim() : '').trim();
+
+    const { email, password } = signupData as any;
+
+    // Validierungen
+    if (!email || typeof email !== 'string' || !email.trim()) {
+      this.logger.warn('signup: missing email');
+      throw new BadRequestException('Email ist erforderlich');
+    }
+    if (!password || typeof password !== 'string' || !password.trim()) {
+      this.logger.warn('signup: missing password');
+      throw new BadRequestException('Passwort ist erforderlich');
+    }
+    if (!name) {
+      this.logger.warn(`signup: missing name (raw: ${JSON.stringify(rawNameFromDto)})`);
+      throw new BadRequestException('Name ist erforderlich');
+    }
 
     try {
       const firestore = this.firebaseApp.firestore();
@@ -80,7 +107,9 @@ export class AuthService {
       this.logger.log(`signup: creating token ${token}`);
       this.logger.log(`signup: token expires at ${expiresAt.toISOString()}`);
       this.logger.log(`signup: server time: ${createdAt.toISOString()}`);
+      this.logger.log(`signup: storing name='${name}' for email='${email}'`);
 
+      // Speichere explizit den getrimmten Namen
       await firestore.collection('emailVerifications').doc(token).set({
         name,
         email,
@@ -93,7 +122,7 @@ export class AuthService {
         'signup: email verification document created with token as document ID',
       );
 
-      await this.sendVerificationEmail(email, token);
+      await this.sendVerificationEmail(email, token, name);
       this.logger.log('signup: verification email sent');
 
       return {
@@ -110,13 +139,13 @@ export class AuthService {
   async login(credentials: LoginDto) {
     this.logger.log(`login start: ${JSON.stringify(credentials)}`);
 
-    const { identifier, password } = credentials;
+    const { identifier, password } = credentials as any;
 
     try {
       const firestore = this.firebaseApp.firestore();
       this.logger.log('login: got firestore instance');
 
-      const isEmail = identifier.includes('@');
+      const isEmail = typeof identifier === 'string' && identifier.includes('@');
 
       const userQuery = isEmail
         ? firestore.collection('users').where('email', '==', identifier)
@@ -139,7 +168,7 @@ export class AuthService {
       }
 
       const userDoc = snapshot.docs[0];
-      const user = userDoc.data();
+      const user = userDoc.data() as any;
       this.logger.log(
         `login: userDoc id=${userDoc.id}, user=${JSON.stringify(user)}`,
       );
@@ -186,7 +215,7 @@ export class AuthService {
       }
 
       const tokenDoc = snapshot.docs[0];
-      const token = tokenDoc.data();
+      const token = tokenDoc.data() as any;
       this.logger.log(
         `refreshTokens: tokenDoc id=${tokenDoc.id}, userId=${token.userId}`,
       );
@@ -236,6 +265,10 @@ export class AuthService {
     this.logger.log('storeRefreshToken: refresh token document created');
   }
 
+  /**
+   * verifyEmailToken: validiert Token-Dokument, erstellt User und gibt name/email zurück.
+   * Name wird robust aus tokenData (name | username | displayName) extrahiert.
+   */
   async verifyEmailToken(token: string): Promise<{
     success: boolean;
     error?: string;
@@ -252,20 +285,21 @@ export class AuthService {
       let decodedToken = token;
       try {
         decodedToken = decodeURIComponent(token);
-      } catch {}
+      } catch {
+        // ignore decode errors
+      }
 
-      let docRef = firestore
-        .collection('emailVerifications')
-        .doc(decodedToken);
+      let docRef = firestore.collection('emailVerifications').doc(decodedToken);
       let doc = await docRef.get();
 
+      // fallback falls encoded/decoded mismatch
       if (!doc.exists && decodedToken !== token) {
         docRef = firestore.collection('emailVerifications').doc(token);
         doc = await docRef.get();
       }
 
       if (!doc.exists) {
-        this.logger.error(`verifyEmailToken: document not found`);
+        this.logger.error(`verifyEmailToken: document not found for token`);
         return {
           success: true,
           error: 'INVALID_TOKEN',
@@ -275,7 +309,7 @@ export class AuthService {
         };
       }
 
-      const tokenData = doc.data();
+      const tokenData = doc.data() as any;
       if (!tokenData) {
         this.logger.warn(`verifyEmailToken: document has no data`);
         await docRef.delete().catch(() => {});
@@ -288,11 +322,17 @@ export class AuthService {
         };
       }
 
-      // Name & Email EINMAL aus dem Token-Dokument holen und überall verwenden
-      const email: string = tokenData.email || '';
-      const rawName: string = tokenData.name || '';
-      const name: string = (rawName && rawName.trim()) || 'Nutzer';
+      // robustes Auslesen von email und name (verschiedene keys möglich)
+      const email: string = (tokenData.email && String(tokenData.email)) || '';
+      const rawNameFromToken =
+        (tokenData.name && String(tokenData.name)) ||
+        (tokenData.username && String(tokenData.username)) ||
+        (tokenData.displayName && String(tokenData.displayName)) ||
+        '';
+      const name: string = (rawNameFromToken && rawNameFromToken.trim()) || 'Nutzer';
       const password = tokenData.password;
+
+      this.logger.log(`verifyEmailToken: tokenData.email='${email}', tokenData.name='${rawNameFromToken}' -> resolved name='${name}'`);
 
       const now = new Date();
       let expiresAt: Date;
@@ -361,7 +401,7 @@ export class AuthService {
         };
       }
 
-      this.logger.log(`verifyEmailToken: creating user for email: ${email}`);
+      this.logger.log(`verifyEmailToken: creating user for email: ${email} with name='${name}'`);
       const userRef = await firestore.collection('users').add({
         name,
         email,
@@ -375,6 +415,7 @@ export class AuthService {
         `verifyEmailToken: user created with ID: ${userRef.id}`,
       );
 
+      // token aufräumen
       docRef.delete().catch(() => {});
 
       return {
@@ -396,13 +437,18 @@ export class AuthService {
     }
   }
 
-  private async sendVerificationEmail(email: string, token: string) {
-    this.logger.log(`sendVerificationEmail start: email=${email}`);
+  /**
+   * sendVerificationEmail: sendet die E-Mail, hängt token und optional name als query param an die URL
+   */
+  private async sendVerificationEmail(email: string, token: string, name?: string) {
+    this.logger.log(`sendVerificationEmail start: email=${email}, name='${name || ''}'`);
 
     const encodedToken = encodeURIComponent(token);
+    const encodedName = encodeURIComponent(name || '');
     this.logger.log(`sendVerificationEmail: raw token=${token}`);
     this.logger.log(`sendVerificationEmail: encoded token=${encodedToken}`);
 
+    // transporter config - environment vars required
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
@@ -416,7 +462,9 @@ export class AuthService {
       },
     });
 
-    const verifyUrl = `https://signly-test-346744939652.europe-west1.run.app/auth/verify?token=${encodedToken}`;
+    // Hänge den Namen optional als Query-Param an (hilft, falls token nicht gelesen werden kann)
+    const baseVerifyUrl = `https://signly-test-346744939652.europe-west1.run.app/auth/verify`;
+    const verifyUrl = `${baseVerifyUrl}?token=${encodedToken}${encodedName ? `&name=${encodedName}` : ''}`;
     this.logger.log(`sendVerificationEmail: verify URL: ${verifyUrl}`);
 
     const mailOptions = {
@@ -451,8 +499,8 @@ export class AuthService {
       return info;
     } catch (error) {
       this.logger.error(
-        `sendVerificationEmail ERROR: ${error.message}`,
-        error.stack,
+        `sendVerificationEmail ERROR: ${error?.message}`,
+        error?.stack,
       );
       throw error;
     }

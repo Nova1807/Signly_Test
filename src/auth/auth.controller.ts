@@ -63,26 +63,36 @@ export class AuthController {
   }
 
   @Get('verify')
-  async verify(@Query('token') token: string, @Res() res: Response) {
-    this.logger.log(`VERIFY ENDPOINT CALLED with token: ${token}`);
+  async verify(@Query('token') token: string, @Query('name') nameQuery: string | undefined, @Res() res: Response) {
+    this.logger.log(`VERIFY ENDPOINT CALLED with token: ${token}, nameQuery: ${nameQuery}`);
 
-    if (!token || token.trim() === '') {
-      this.logger.warn('verify: empty token provided');
+    if ((!token || token.trim() === '') && (!nameQuery || nameQuery.trim() === '')) {
+      this.logger.warn('verify: empty token and empty name provided');
       return this.renderSuccessPage(res, 'Nutzer');
     }
 
     try {
-      this.logger.log(
-        `verify: calling authService.verifyEmailToken('${token}')`,
-      );
-      const result = await this.authService.verifyEmailToken(token);
+      // Wenn token vorhanden, rufe verifyEmailToken auf
+      if (token && token.trim() !== '') {
+        this.logger.log(`verify: calling authService.verifyEmailToken('${token}')`);
+        const result = await this.authService.verifyEmailToken(token);
+        this.logger.log(`verify: result: ${JSON.stringify(result)}`);
 
-      this.logger.log(`verify: result: ${JSON.stringify(result)}`);
+        // result.name ist bereits robust aufbereitet im Service
+        const userName = (result.name || '').trim() || 'Nutzer';
+        this.logger.log(`verify: displaying name from token: ${userName}`);
+        return this.renderSuccessPage(res, userName);
+      }
 
-      const userName = (result.name || '').trim() || 'Nutzer';
-      this.logger.log(`verify: displaying name: ${userName}`);
+      // Falls kein token, aber name als query param (fallback), nutze diesen
+      if (nameQuery && nameQuery.trim() !== '') {
+        const userName = nameQuery.trim();
+        this.logger.log(`verify: displaying name from query param: ${userName}`);
+        return this.renderSuccessPage(res, userName);
+      }
 
-      return this.renderSuccessPage(res, userName);
+      // Fallback
+      return this.renderSuccessPage(res, 'Nutzer');
     } catch (err) {
       this.logger.error(`verify ERROR: ${err?.message}`, err?.stack);
       return this.renderSuccessPage(res, 'Nutzer');
@@ -90,6 +100,7 @@ export class AuthController {
   }
 
   private renderSuccessPage(res: Response, name: string) {
+    const safeName = (name || '').toString().replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const html = `
       <!DOCTYPE html>
       <html lang="de">
@@ -141,7 +152,7 @@ export class AuthController {
           <div class="success-icon">✅</div>
           <h1>Account erfolgreich erstellt</h1>
           <p class="subtitle">Willkommen bei Signly</p>
-          <div class="username">${name}</div>
+          <div class="username">${safeName}</div>
         </div>
       </body>
       </html>
