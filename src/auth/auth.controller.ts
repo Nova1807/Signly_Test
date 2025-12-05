@@ -72,10 +72,11 @@ export class AuthController {
       `VERIFY ENDPOINT CALLED with token: ${token}, nameQuery: ${nameQuery}`,
     );
 
-    const fallbackName = (nameQuery || '').trim() || 'Nutzer';
+    // Name kommt NUR aus dem Query-Param (falls vorhanden)
+    const decodedName = nameQuery ? decodeURIComponent(nameQuery).trim() : '';
+    const fallbackName = decodedName || 'Nutzer';
 
-    // Wenn weder Token noch Name da sind: direkt Fallback anzeigen
-    if ((!token || token.trim() === '') && (!nameQuery || nameQuery.trim() === '')) {
+    if ((!token || token.trim() === '') && !decodedName) {
       this.logger.warn('verify: empty token and empty name provided');
       return this.renderSuccessPage(res, 'Nutzer');
     }
@@ -85,30 +86,26 @@ export class AuthController {
         this.logger.log(
           `verify: calling authService.verifyEmailToken('${token}')`,
         );
+
         const result = await this.authService.verifyEmailToken(token);
         this.logger.log(`verify: result: ${JSON.stringify(result)}`);
 
-        // Priorität: result.name -> nameQuery -> "Nutzer"
-        const userName =
-          (result.name && result.name.trim()) ||
-          fallbackName;
+        // Service verifiziert nur, Name wird nicht aus dem Token gelesen
+        const userName = fallbackName;
 
         this.logger.log(
-          `verify: displaying userName='${userName}' (result.name='${result.name}', nameQuery='${nameQuery}')`,
+          `verify: rendering success page with userName='${userName}'`,
         );
         return this.renderSuccessPage(res, userName);
       }
 
-      // Falls kein token, aber name als query param (fallback), nutze diesen
-      if (nameQuery && nameQuery.trim() !== '') {
-        const userName = nameQuery.trim();
+      if (decodedName) {
         this.logger.log(
-          `verify: displaying name from query param: ${userName}`,
+          `verify: no token, using decodedName from query: '${decodedName}'`,
         );
-        return this.renderSuccessPage(res, userName);
+        return this.renderSuccessPage(res, decodedName);
       }
 
-      // Fallback
       return this.renderSuccessPage(res, 'Nutzer');
     } catch (err) {
       this.logger.error(`verify ERROR: ${err?.message}`, err?.stack);
