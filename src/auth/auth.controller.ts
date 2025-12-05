@@ -72,7 +72,6 @@ export class AuthController {
       `VERIFY ENDPOINT CALLED with token: ${token}, nameQuery: ${nameQuery}`,
     );
 
-    // Name kommt NUR aus dem Query-Param (falls vorhanden)
     const decodedName = nameQuery ? decodeURIComponent(nameQuery).trim() : '';
     const fallbackName = decodedName || 'Nutzer';
 
@@ -90,9 +89,21 @@ export class AuthController {
         const result = await this.authService.verifyEmailToken(token);
         this.logger.log(`verify: result: ${JSON.stringify(result)}`);
 
-        // Service verifiziert nur, Name wird nicht aus dem Token gelesen
-        const userName = fallbackName;
+        // Token ungültig / abgelaufen -> Fehlerseite
+        if (
+          result.error === 'TOKEN_EXPIRED' ||
+          result.error === 'INVALID_TOKEN' ||
+          result.error === 'INVALID_TOKEN_DATA' ||
+          result.error === 'INVALID_TOKEN_FORMAT'
+        ) {
+          this.logger.log(
+            `verify: token invalid/expired with error='${result.error}', rendering expired page`,
+          );
+          return this.renderExpiredPage(res);
+        }
 
+        // Erfolg: normale Success-Seite mit Name aus Query-Param
+        const userName = fallbackName;
         this.logger.log(
           `verify: rendering success page with userName='${userName}'`,
         );
@@ -109,7 +120,7 @@ export class AuthController {
       return this.renderSuccessPage(res, 'Nutzer');
     } catch (err) {
       this.logger.error(`verify ERROR: ${err?.message}`, err?.stack);
-      return this.renderSuccessPage(res, fallbackName);
+      return this.renderExpiredPage(res);
     }
   }
 
@@ -175,5 +186,61 @@ export class AuthController {
       </html>
     `;
     return res.send(html);
+  }
+
+  private renderExpiredPage(res: Response) {
+    const html = `
+      <!DOCTYPE html>
+      <html lang="de">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Link abgelaufen - Signly</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 50px;
+            background-color: #f5f5f5;
+            margin: 0;
+          }
+          .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+          }
+          .error-icon {
+            font-size: 60px;
+            color: #e53935;
+            margin-bottom: 20px;
+          }
+          h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+          }
+          .subtitle {
+            color: #666;
+            font-size: 16px;
+            margin-bottom: 30px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="error-icon">⚠️</div>
+          <h1>Link ist nicht mehr gültig</h1>
+          <p class="subtitle">
+            Der Bestätigungslink ist abgelaufen oder ungültig.<br/>
+            Bitte fordere einen neuen Bestätigungslink an.
+          </p>
+        </div>
+      </body>
+      </html>
+    `;
+    return res.status(400).send(html);
   }
 }

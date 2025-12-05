@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { SignupDto } from './dto/signup.dto';
-  import * as admin from 'firebase-admin';
+import * as admin from 'firebase-admin';
 import * as bcrypt from 'bcrypt';
 import { LoginDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
@@ -108,6 +108,7 @@ export class AuthService {
       this.logger.log(`signup: token expires at ${expiresAt.toISOString()}`);
       this.logger.log(`signup: server time: ${createdAt.toISOString()}`);
 
+      // hier speichern wir bewusst KEINEN Namen im Token-Dokument
       await firestore.collection('emailVerifications').doc(token).set({
         email,
         password: hashedPassword,
@@ -265,7 +266,7 @@ export class AuthService {
 
   /**
    * verifyEmailToken: validiert Token-Dokument, erstellt User und gibt email zurück.
-   * Name wird NICHT mehr aus dem Token gelesen, sondern nur der Token geprüft.
+   * Name wird NICHT mehr aus dem Token gelesen.
    */
   async verifyEmailToken(token: string): Promise<{
     success: boolean;
