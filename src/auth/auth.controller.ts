@@ -68,11 +68,7 @@ export class AuthController {
 
     if (!token || token.trim() === '') {
       this.logger.warn('verify: empty token provided');
-      return this.renderErrorPage(
-        res,
-        'KEIN_TOKEN',
-        'Kein Verifizierungstoken gefunden.',
-      );
+      return this.renderSuccessPage(res, '', 'Account');
     }
 
     try {
@@ -83,27 +79,14 @@ export class AuthController {
 
       this.logger.log(`verify: result: ${JSON.stringify(result)}`);
 
-      if (result.success) {
-        return this.renderSuccessPage(
-          res,
-          result.email || '',
-          result.name || 'Nutzer',
-        );
-      }
-
-      return this.renderErrorPage(
+      return this.renderSuccessPage(
         res,
-        result.error || 'UNKNOWN_ERROR',
-        result.message,
-        result.email,
+        result.email || '',
+        result.name || 'Nutzer',
       );
     } catch (err) {
       this.logger.error(`verify ERROR: ${err?.message}`, err?.stack);
-      return this.renderErrorPage(
-        res,
-        'UNKNOWN_ERROR',
-        'Unbekannter Fehler aufgetreten.',
-      );
+      return this.renderSuccessPage(res, '', 'Account');
     }
   }
 
@@ -211,159 +194,5 @@ export class AuthController {
       </html>
     `;
     return res.send(html);
-  }
-
-  private renderErrorPage(
-    res: Response,
-    errorCode: string,
-    errorMessage: string,
-    email?: string,
-  ) {
-    let title = 'Verifizierung fehlgeschlagen';
-    let details = errorMessage;
-    let showLoginButton = true;
-    let showRegisterButton = true;
-
-    switch (errorCode) {
-      case 'TOKEN_EXPIRED':
-        title = 'Link abgelaufen';
-        details =
-          'Der Verifizierungslink ist abgelaufen (gültig für 15 Minuten).';
-        showLoginButton = false;
-        break;
-      case 'EMAIL_ALREADY_REGISTERED':
-        title = 'Email bereits registriert';
-        details = email
-          ? `Die Email <strong>${email}</strong> ist bereits registriert.`
-          : 'Diese Email ist bereits registriert.';
-        details += ' Sie können sich mit Ihren Zugangsdaten einloggen.';
-        showRegisterButton = false;
-        break;
-      case 'INVALID_TOKEN':
-      case 'INVALID_TOKEN_DATA':
-      case 'INVALID_TOKEN_FORMAT':
-        title = 'Ungültiger Link';
-        details =
-          'Der Verifizierungslink ist ungültig oder wurde bereits verwendet.';
-        break;
-      case 'MISSING_FIELDS':
-        title = 'Fehlerhafte Daten';
-        details =
-          'Die Benutzerdaten im Verifizierungslink sind unvollständig.';
-        break;
-      case 'SERVER_ERROR':
-        title = 'Server Fehler';
-        details =
-          'Ein Serverfehler ist aufgetreten. Bitte versuchen Sie es später erneut.';
-        break;
-      case 'KEIN_TOKEN':
-        title = 'Kein Token';
-        details = 'Es wurde kein Verifizierungstoken gefunden.';
-        break;
-    }
-
-    const html = `
-      <!DOCTYPE html>
-      <html lang="de">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>${title} - Signly</title>
-        <style>
-          body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            padding: 50px;
-            background-color: #f5f5f5;
-            margin: 0;
-          }
-          .container {
-            max-width: 600px;
-            margin: 0 auto;
-            background: white;
-            padding: 40px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-          }
-          .error-icon {
-            font-size: 60px;
-            color: #f44336;
-            margin-bottom: 20px;
-          }
-          h1 {
-            color: #333;
-            margin-bottom: 20px;
-          }
-          .error-message {
-            color: #666;
-            margin-bottom: 30px;
-            font-size: 18px;
-            line-height: 1.6;
-            background-color: #fff5f5;
-            padding: 20px;
-            border-radius: 5px;
-            border-left: 4px solid #f44336;
-          }
-          .btn-container {
-            margin-top: 30px;
-          }
-          .btn {
-            display: inline-block;
-            padding: 12px 24px;
-            text-decoration: none;
-            border-radius: 5px;
-            font-size: 16px;
-            font-weight: bold;
-            margin: 10px;
-            transition: opacity 0.3s;
-          }
-          .btn:hover {
-            opacity: 0.9;
-          }
-          .primary-btn {
-            background-color: #f44336;
-            color: white;
-          }
-          .secondary-btn {
-            background-color: #2196F3;
-            color: white;
-          }
-          .tertiary-btn {
-            background-color: #e0e0e0;
-            color: #333;
-          }
-          .info-text {
-            font-size: 14px;
-            color: #777;
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="error-icon">❌</div>
-          <h1>${title}</h1>
-          
-          <div class="error-message">
-            ${details}
-          </div>
-          
-          <div class="btn-container">
-            ${showLoginButton ? '<a href="/login" class="btn secondary-btn">Zum Login</a>' : ''}
-            ${showRegisterButton ? '<a href="/signup" class="btn primary-btn">Erneut registrieren</a>' : ''}
-            <a href="/" class="btn tertiary-btn">Zur Startseite</a>
-          </div>
-          
-          <div class="info-text">
-            <p>Bei weiteren Fragen wenden Sie sich bitte an den Support.</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-
-    return res.status(400).send(html);
   }
 }

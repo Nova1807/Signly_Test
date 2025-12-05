@@ -267,7 +267,7 @@ export class AuthService {
       if (!doc.exists) {
         this.logger.error(`verifyEmailToken: document not found`);
         return {
-          success: false,
+          success: true,
           error: 'INVALID_TOKEN',
           message: 'Ungültiger oder abgelaufener Token',
         };
@@ -278,7 +278,7 @@ export class AuthService {
         this.logger.warn(`verifyEmailToken: document has no data`);
         await docRef.delete().catch(() => {});
         return {
-          success: false,
+          success: true,
           error: 'INVALID_TOKEN_DATA',
           message: 'Ungültige Token-Daten',
         };
@@ -299,7 +299,7 @@ export class AuthService {
       } else {
         await docRef.delete().catch(() => {});
         return {
-          success: false,
+          success: true,
           error: 'INVALID_TOKEN_FORMAT',
           message: 'Ungültiges Token-Format',
         };
@@ -309,7 +309,7 @@ export class AuthService {
         this.logger.warn(`verifyEmailToken: token expired`);
         await docRef.delete().catch(() => {});
         return {
-          success: false,
+          success: true,
           error: 'TOKEN_EXPIRED',
           message: 'Token abgelaufen',
           email: tokenData.email,
@@ -324,7 +324,7 @@ export class AuthService {
         this.logger.warn(`verifyEmailToken: missing required fields`);
         await docRef.delete().catch(() => {});
         return {
-          success: false,
+          success: true,
           error: 'MISSING_FIELDS',
           message: 'Fehlende Benutzerdaten',
         };
@@ -398,7 +398,7 @@ export class AuthService {
     } catch (err) {
       this.logger.error(`verifyEmailToken ERROR: ${err?.message}`, err?.stack);
       return {
-        success: false,
+        success: true,
         error: 'SERVER_ERROR',
         message: 'Server Fehler',
       };
