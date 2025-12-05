@@ -11,6 +11,7 @@ import * as bcrypt from 'bcrypt';
 import { LoginDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
 import { v4 as uuidv4 } from 'uuid';
+import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class AuthService {
@@ -66,17 +67,30 @@ export class AuthService {
         );
       }
 
-      // 3. Passwort hashen & User speichern
+      // 3. Passwort hashen
       const hashedPassword = await bcrypt.hash(password, 10);
       this.logger.log('signup: password hashed');
 
-      await firestore.collection('users').add({
+      // 4. Verification-Token erzeugen und in emailVerifications speichern
+      const token = uuidv4();
+      const createdAt = new Date();
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 24); // 24h gültig
+
+      await firestore.collection('emailVerifications').doc(token).set({
         name,
         email,
         password: hashedPassword,
+        createdAt,
+        expiresAt,
       });
 
-      this.logger.log('signup: user document created');
+      this.logger.log('signup: email verification document created');
+
+      // 5. Verifizierungs-Mail senden
+      await this.sendVerificationEmail(email, token);
+      this.logger.log('signup: verification email sent');
+
       return { success: true };
     } catch (err) {
       this.logger.error(`signup internal error: ${err?.message}`, err?.stack);
@@ -93,10 +107,8 @@ export class AuthService {
       const firestore = this.firebaseApp.firestore();
       this.logger.log('login: got firestore instance');
 
-      // Entscheiden: ist identifier eine Email?
       const isEmail = identifier.includes('@');
 
-      // Query je nach Typ
       const userQuery = isEmail
         ? firestore.collection('users').where('email', '==', identifier)
         : firestore.collection('users').where('name', '==', identifier);
@@ -209,5 +221,99 @@ export class AuthService {
 
     await firestore.collection('refreshTokens').add({ token, userId, expiryDate });
     this.logger.log('storeRefreshToken: refresh token document created');
+  }
+
+  async verifyEmailToken(token: string) {
+    this.logger.log(`verifyEmailToken start: token=${token}`);
+    const firestore = this.firebaseApp.firestore();
+
+    const docRef = firestore.collection('emailVerifications').doc(token);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      this.logger.warn(`verifyEmailToken: token not found`);
+      throw new BadRequestException('Invalid token');
+    }
+
+    const data = doc.data();
+    if (!data) {
+      this.logger.warn(`verifyEmailToken: token data undefined`);
+      await docRef.delete();
+      throw new BadRequestException('Invalid token');
+    }
+
+    const now = new Date();
+
+    // expiresAt kann Date oder Firestore Timestamp sein
+    let expiresAt: Date | null = null;
+    const rawExpiresAt = (data as any).expiresAt;
+
+    if (rawExpiresAt instanceof Date) {
+      expiresAt = rawExpiresAt;
+    } else if (rawExpiresAt && typeof rawExpiresAt.toDate === 'function') {
+      expiresAt = rawExpiresAt.toDate();
+    }
+
+    if (!expiresAt || expiresAt < now) {
+      this.logger.warn(`verifyEmailToken: token expired`);
+      await docRef.delete();
+      throw new BadRequestException('Token expired');
+    }
+
+    const email = (data as any).email;
+    const name = (data as any).name;
+    const password = (data as any).password;
+
+    if (!email || !name || !password) {
+      this.logger.warn(`verifyEmailToken: missing user fields in token data`);
+      await docRef.delete();
+      throw new BadRequestException('Invalid token data');
+    }
+
+    const emailSnapshot = await firestore
+      .collection('users')
+      .where('email', '==', email)
+      .get();
+
+    if (!emailSnapshot.empty) {
+      this.logger.warn(`verifyEmailToken: email already in use: ${email}`);
+      await docRef.delete();
+      throw new BadRequestException('Email already verified');
+    }
+
+    await firestore.collection('users').add({
+      name,
+      email,
+      password,
+    });
+
+    await docRef.delete();
+
+    this.logger.log(`verifyEmailToken: user created and token deleted`);
+    return { success: true };
+  }
+
+  private async sendVerificationEmail(email: string, token: string) {
+    this.logger.log(`sendVerificationEmail start: email=${email}`);
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER, // z.B. signlylernapp@gmail.com
+        pass: process.env.EMAIL_PASS, // 16-stelliges App-Passwort
+      },
+    });
+
+    const verifyUrl = `https://signly-test-346744939652.europe-west1.run.app/auth/verify?token=${token}`;
+
+    await transporter.sendMail({
+      from: `"Signly" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'Bestätige deine E-Mail-Adresse',
+      html: `<p>Bitte bestätige deine E-Mail, indem du auf diesen Link klickst:</p>
+             <p><a href="${verifyUrl}">${verifyUrl}</a></p>`,
+    });
+
+    this.logger.log(`sendVerificationEmail: mail sent to ${email}`);
   }
 }

@@ -3,6 +3,8 @@ import {
   Post,
   Body,
   Logger,
+  Get,
+  Query,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
@@ -52,6 +54,19 @@ export class AuthController {
       return result;
     } catch (err) {
       this.logger.error(`refresh error: ${err?.message}`, err?.stack);
+      throw err;
+    }
+  }
+
+  @Get('verify')
+  async verify(@Query('token') token: string) {
+    this.logger.log(`verify called with token: ${token}`);
+    try {
+      const result = await this.authService.verifyEmailToken(token);
+      this.logger.log('verify finished successfully');
+      return result;
+    } catch (err) {
+      this.logger.error(`verify error: ${err?.message}`, err?.stack);
       throw err;
     }
   }

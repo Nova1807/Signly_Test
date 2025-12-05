@@ -10,12 +10,10 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
       useFactory: (configService: ConfigService) => {
         if (!admin.apps.length) {
           const projectId =
-            configService.get<string>('FIREBASE_PROJECT_ID') ||
-            'signly-be33f'; // Projekt-ID aus der URL
+            configService.get<string>('FIREBASE_PROJECT_ID') || 'signly-be33f';
 
           const databaseId =
-            configService.get<string>('FIRESTORE_DATABASE_ID') ||
-            'signlydb'; // HIER deine DB-ID aus der UI
+            configService.get<string>('FIRESTORE_DATABASE_ID') || 'signlydb';
 
           admin.initializeApp({
             credential: admin.credential.applicationDefault(),
@@ -24,7 +22,6 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 
           const fs = admin.firestore();
 
-          // WICHTIG: explizit deine Enterprise-DB setzen
           fs.settings({
             databaseId,
           });

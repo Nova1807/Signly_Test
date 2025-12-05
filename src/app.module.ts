@@ -16,8 +16,8 @@ import { FirebaseModule } from './firebase/firebase.module';
     }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: async (config) => ({
-        secret: config.get('jwt.secret'),
+      useFactory: async (configService: ConfigService) => ({
+        secret: configService.get('jwt.secret'),
       }),
       global: true,
       inject: [ConfigService],
