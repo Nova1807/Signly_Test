@@ -351,7 +351,7 @@ export class AuthService {
         const existingUser = userQuery.docs[0];
         const existingUserData = existingUser.data();
         this.logger.log(`verifyEmailToken: existing user name: ${existingUserData.name}`);
-        await docRef.delete().catch(() => {});
+        docRef.delete().catch(() => {});
         return {
           success: true,
           message: 'Account existiert und ist verifiziert.',
@@ -375,8 +375,6 @@ export class AuthService {
         `verifyEmailToken: user created with ID: ${userRef.id}`,
       );
 
-      docRef.delete().catch(() => {});
-
       const newUserCheck = await firestore
         .collection('users')
         .where('email', '==', email)
@@ -388,6 +386,9 @@ export class AuthService {
         this.logger.log(
           `verifyEmailToken: verified new user in database with ID: ${newUser.id}, name: ${newUserData.name}`,
         );
+        
+        docRef.delete().catch(() => {});
+        
         return {
           success: true,
           message: 'Email erfolgreich verifiziert',
@@ -400,6 +401,9 @@ export class AuthService {
       this.logger.warn(
         `verifyEmailToken: fallback return after user creation`,
       );
+      
+      docRef.delete().catch(() => {});
+      
       return {
         success: true,
         message: 'Email erfolgreich verifiziert',
