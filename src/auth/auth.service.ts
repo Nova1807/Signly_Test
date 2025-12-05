@@ -288,6 +288,7 @@ export class AuthService {
         };
       }
 
+      // Name & Email EINMAL aus dem Token-Dokument holen und überall verwenden
       const email: string = tokenData.email || '';
       const rawName: string = tokenData.name || '';
       const name: string = (rawName && rawName.trim()) || 'Nutzer';
@@ -350,10 +351,6 @@ export class AuthService {
           `verifyEmailToken: user already exists for email: ${email}`,
         );
         const existingUser = userQuery.docs[0];
-        const existingUserData = existingUser.data();
-        this.logger.log(
-          `verifyEmailToken: existing user name: ${existingUserData.name}`,
-        );
         docRef.delete().catch(() => {});
         return {
           success: true,
@@ -378,7 +375,6 @@ export class AuthService {
         `verifyEmailToken: user created with ID: ${userRef.id}`,
       );
 
-      // Token-Dokument löschen, Name ist bereits in Variable "name"
       docRef.delete().catch(() => {});
 
       return {
