@@ -68,7 +68,7 @@ export class AuthController {
 
     if (!token || token.trim() === '') {
       this.logger.warn('verify: empty token provided');
-      return this.renderSuccessPage(res, '', 'Nutzer');
+      return this.renderSuccessPage(res, 'Nutzer');
     }
 
     try {
@@ -79,19 +79,17 @@ export class AuthController {
 
       this.logger.log(`verify: result: ${JSON.stringify(result)}`);
 
-      return this.renderSuccessPage(
-        res,
-        result.email || '',
-        result.name || 'Nutzer',
-      );
+      const userName = result.name && result.name.trim() ? result.name : 'Nutzer';
+      this.logger.log(`verify: displaying name: ${userName}`);
+      
+      return this.renderSuccessPage(res, userName);
     } catch (err) {
       this.logger.error(`verify ERROR: ${err?.message}`, err?.stack);
-      return this.renderSuccessPage(res, '', 'Nutzer');
+      return this.renderSuccessPage(res, 'Nutzer');
     }
   }
 
-  private renderSuccessPage(res: Response, email: string, name: string) {
-    const displayName = name && name !== 'Nutzer' ? name : 'Nutzer';
+  private renderSuccessPage(res: Response, name: string) {
     const html = `
       <!DOCTYPE html>
       <html lang="de">
@@ -143,7 +141,7 @@ export class AuthController {
           <div class="success-icon">✅</div>
           <h1>Account erfolgreich erstellt</h1>
           <p class="subtitle">Willkommen bei Signly</p>
-          <div class="username">${displayName}</div>
+          <div class="username">${name}</div>
         </div>
       </body>
       </html>

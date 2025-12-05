@@ -350,6 +350,7 @@ export class AuthService {
         );
         const existingUser = userQuery.docs[0];
         const existingUserData = existingUser.data();
+        this.logger.log(`verifyEmailToken: existing user name: ${existingUserData.name}`);
         await docRef.delete().catch(() => {});
         return {
           success: true,
@@ -385,14 +386,14 @@ export class AuthService {
         const newUser = newUserCheck.docs[0];
         const newUserData = newUser.data();
         this.logger.log(
-          `verifyEmailToken: verified new user in database with ID: ${newUser.id}`,
+          `verifyEmailToken: verified new user in database with ID: ${newUser.id}, name: ${newUserData.name}`,
         );
         return {
           success: true,
           message: 'Email erfolgreich verifiziert',
           userId: newUser.id,
           email: email,
-          name: newUserData.name || name,
+          name: newUserData.name,
         };
       }
 
