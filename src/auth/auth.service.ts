@@ -252,34 +252,28 @@ export class AuthService {
     name?: string;
   }> {
     this.logger.log(`verifyEmailToken START: token='${token}'`);
-    this.logger.log(
-      `verifyEmailToken: server time: ${new Date().toISOString()}`,
-    );
 
     const firestore = this.firebaseApp.firestore();
-    let docRef: admin.firestore.DocumentReference | null = null;
-    let tokenData: any = null;
 
     try {
       // Token URL-decoden
       let decodedToken = token;
       try {
         decodedToken = decodeURIComponent(token);
-        this.logger.log(`verifyEmailToken: decoded token: '${decodedToken}'`);
-      } catch {
-        this.logger.log(`verifyEmailToken: no URL decoding needed`);
-      }
+      } catch {}
 
-      // 1. Token finden
-      docRef = firestore.collection('emailVerifications').doc(decodedToken);
+      // 1. Token-Dokument holen
+      let docRef = firestore
+        .collection('emailVerifications')
+        .doc(decodedToken);
       let doc = await docRef.get();
 
-      // Falls nicht gefunden, mit original token versuchen
       if (!doc.exists && decodedToken !== token) {
         docRef = firestore.collection('emailVerifications').doc(token);
         doc = await docRef.get();
       }
 
+      // Wenn Token nicht existiert -> Fehler
       if (!doc.exists) {
         this.logger.error(`verifyEmailToken: document not found`);
         return {
@@ -289,32 +283,16 @@ export class AuthService {
         };
       }
 
-      this.logger.log(`verifyEmailToken: document found with ID: '${doc.id}'`);
-
-      tokenData = doc.data();
+      const tokenData = doc.data();
       if (!tokenData) {
         this.logger.warn(`verifyEmailToken: document has no data`);
-        // Token löschen da ungültig
-        try {
-          if (docRef) {
-            await docRef.delete();
-          }
-        } catch (cleanupErr) {
-          this.logger.error(
-            'verifyEmailToken: cleanup error on invalid data',
-            cleanupErr,
-          );
-        }
+        await docRef.delete().catch(() => {});
         return {
           success: false,
           error: 'INVALID_TOKEN_DATA',
           message: 'Ungültige Token-Daten',
         };
       }
-
-      this.logger.log(
-        `verifyEmailToken: token data loaded, email: ${tokenData.email}`,
-      );
 
       // 2. Ablaufzeit prüfen
       const now = new Date();
@@ -325,32 +303,12 @@ export class AuthService {
         typeof tokenData.expiresAt.toDate === 'function'
       ) {
         expiresAt = tokenData.expiresAt.toDate();
-        this.logger.log(
-          `verifyEmailToken: expiresAt is Firestore Timestamp`,
-        );
       } else if (tokenData.expiresAt instanceof Date) {
         expiresAt = tokenData.expiresAt;
-        this.logger.log(`verifyEmailToken: expiresAt is Date object`);
       } else if (typeof tokenData.expiresAt === 'string') {
         expiresAt = new Date(tokenData.expiresAt);
-        this.logger.log(
-          `verifyEmailToken: expiresAt is string, parsed to Date`,
-        );
       } else {
-        this.logger.warn(
-          `verifyEmailToken: invalid expiresAt format: ${typeof tokenData.expiresAt}`,
-        );
-        // Token löschen da ungültig
-        try {
-          if (docRef) {
-            await docRef.delete();
-          }
-        } catch (cleanupErr) {
-          this.logger.error(
-            'verifyEmailToken: cleanup error on invalid format',
-            cleanupErr,
-          );
-        }
+        await docRef.delete().catch(() => {});
         return {
           success: false,
           error: 'INVALID_TOKEN_FORMAT',
@@ -358,33 +316,9 @@ export class AuthService {
         };
       }
 
-      this.logger.log(
-        `verifyEmailToken: now=${now.toISOString()}, expiresAt=${expiresAt.toISOString()}`,
-      );
-      const timeDiffMs = expiresAt.getTime() - now.getTime();
-      this.logger.log(
-        `verifyEmailToken: time difference=${timeDiffMs}ms (${Math.round(
-          timeDiffMs / 1000,
-        )} seconds)`,
-      );
-
-      if (timeDiffMs < 0) {
-        this.logger.warn(
-          `verifyEmailToken: token expired ${Math.abs(
-            Math.round(timeDiffMs / 1000),
-          )} seconds ago`,
-        );
-        // Token löschen da abgelaufen (best effort)
-        try {
-          if (docRef) {
-            await docRef.delete();
-          }
-        } catch (cleanupErr) {
-          this.logger.error(
-            'verifyEmailToken: cleanup error on expired token',
-            cleanupErr,
-          );
-        }
+      if (expiresAt.getTime() < now.getTime()) {
+        this.logger.warn(`verifyEmailToken: token expired`);
+        await docRef.delete().catch(() => {});
         return {
           success: false,
           error: 'TOKEN_EXPIRED',
@@ -399,17 +333,7 @@ export class AuthService {
 
       if (!email || !name || !password) {
         this.logger.warn(`verifyEmailToken: missing required fields`);
-        // Token löschen da unvollständig (best effort)
-        try {
-          if (docRef) {
-            await docRef.delete();
-          }
-        } catch (cleanupErr) {
-          this.logger.error(
-            'verifyEmailToken: cleanup error on missing fields',
-            cleanupErr,
-          );
-        }
+        await docRef.delete().catch(() => {});
         return {
           success: false,
           error: 'MISSING_FIELDS',
@@ -424,100 +348,41 @@ export class AuthService {
         .get();
 
       if (!emailCheck.empty) {
-        this.logger.warn(
-          `verifyEmailToken: email already registered: ${email}`,
-        );
-        // Token löschen (best effort)
-        try {
-          if (docRef) {
-            await docRef.delete();
-          }
-        } catch (cleanupErr) {
-          this.logger.error(
-            'verifyEmailToken: cleanup error on already registered email',
-            cleanupErr,
-          );
-        }
-        // WICHTIG: hier jetzt KEIN Fehler mehr, sondern Erfolg,
-        // weil der Account bereits existiert.
-        const existingUserDoc = emailCheck.docs[0];
-        const existingUser = existingUserDoc.data();
+        // Email existiert schon -> Erfolg
+        this.logger.log(`verifyEmailToken: email already exists: ${email}`);
+        await docRef.delete().catch(() => {});
         return {
           success: true,
           message: 'Email war bereits verifiziert.',
-          userId: existingUserDoc.id,
+          userId: emailCheck.docs[0].id,
           email: email,
-          name: existingUser.name || name,
+          name: emailCheck.docs[0].data().name,
         };
       }
 
-      // 4. User erstellen (wenn alle Prüfungen OK)
+      // 4. User anlegen
       this.logger.log(`verifyEmailToken: creating user for email: ${email}`);
-      let userRef;
-      try {
-        userRef = await firestore.collection('users').add({
-          name,
-          email,
-          password,
-          emailVerified: true,
-          createdAt: admin.firestore.Timestamp.fromDate(new Date()),
-          lastLogin: null,
-        });
-      } catch (createErr) {
-        this.logger.error(
-          `verifyEmailToken: user creation failed: ${createErr?.message}`,
-          createErr?.stack,
-        );
-        // Token NICHT löschen, damit erneut versucht werden kann
-        return {
-          success: false,
-          error: 'SERVER_ERROR',
-          message: 'Server Fehler bei der Verifizierung',
-        };
-      }
+      const userRef = await firestore.collection('users').add({
+        name,
+        email,
+        password,
+        emailVerified: true,
+        createdAt: admin.firestore.Timestamp.fromDate(new Date()),
+        lastLogin: null,
+      });
 
       this.logger.log(
         `verifyEmailToken: user created with ID: ${userRef.id}`,
       );
 
-      // 5. Cleanup: Token löschen und andere Tokens löschen (best effort)
-      (async () => {
-        try {
-          if (docRef) {
-            await docRef.delete();
-            this.logger.log(
-              `verifyEmailToken: token deleted after successful verification`,
-            );
-          }
+      // 5. Token löschen (im Hintergrund, nicht warten)
+      docRef.delete().catch(() => {
+        this.logger.error('verifyEmailToken: error deleting token doc');
+      });
 
-          const otherTokens = await firestore
-            .collection('emailVerifications')
-            .where('email', '==', email)
-            .get();
-
-          if (!otherTokens.empty) {
-            const deletePromises = otherTokens.docs.map((d) => d.ref.delete());
-            await Promise.all(deletePromises);
-            this.logger.log(
-              `verifyEmailToken: deleted ${otherTokens.size} other tokens for ${email}`,
-            );
-          }
-        } catch (cleanupErr) {
-          this.logger.error(
-            'verifyEmailToken: cleanup error after success',
-            cleanupErr,
-          );
-        }
-      })();
-
-      this.logger.log(
-        `verifyEmailToken: SUCCESS - email ${email} verified`,
-      );
-
-      // 6. IMMER success true, wenn User erstellt wurde
+      // 6. IMMER success true nach User-Erstellung
       return {
         success: true,
-        error: undefined,
         message: 'Email erfolgreich verifiziert',
         userId: userRef.id,
         email: email,
