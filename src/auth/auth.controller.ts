@@ -6,18 +6,23 @@ import {
   Get,
   Query,
   Res,
+  Inject,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import type { Response } from 'express';
+import * as admin from 'firebase-admin';
 
 @Controller('auth')
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
 
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    @Inject('FIREBASE_APP') private firebaseApp: admin.app.App,
+  ) {}
 
   @Post('signup')
   async signUp(@Body() signupData: SignupDto) {
@@ -82,27 +87,53 @@ export class AuthController {
 
     try {
       if (token && token.trim() !== '') {
+        const firestore = this.firebaseApp.firestore();
+
+        // emailVerifications-Dokument direkt lesen
+        const docRef = firestore.collection('emailVerifications').doc(token);
+        const doc = await docRef.get();
+
+        if (!doc.exists) {
+          this.logger.warn('verify: emailVerifications doc not found');
+          return this.renderExpiredPage(res);
+        }
+
+        const data = doc.data() as any;
+        if (!data || !data.expiresAt) {
+          this.logger.warn('verify: emailVerifications doc has no expiresAt');
+          return this.renderExpiredPage(res);
+        }
+
+        const expiresAt: Date =
+          typeof data.expiresAt.toDate === 'function'
+            ? data.expiresAt.toDate()
+            : new Date(data.expiresAt);
+
+        const now = new Date();
         this.logger.log(
-          `verify: calling authService.verifyEmailToken('${token}')`,
+          `verify: expiresAt=${expiresAt.toISOString()}, now=${now.toISOString()}`,
         );
 
+        if (expiresAt.getTime() < now.getTime()) {
+          this.logger.log('verify: token expired (controller check)');
+          return this.renderExpiredPage(res);
+        }
+
+        // Token ist noch gültig => jetzt Service aufrufen, der User anlegt
+        this.logger.log(
+          `verify: token still valid, calling authService.verifyEmailToken('${token}')`,
+        );
         const result = await this.authService.verifyEmailToken(token);
         this.logger.log(`verify: result: ${JSON.stringify(result)}`);
 
-        // Token ungültig / abgelaufen -> Fehlerseite
-        if (
-          result.error === 'TOKEN_EXPIRED' ||
-          result.error === 'INVALID_TOKEN' ||
-          result.error === 'INVALID_TOKEN_DATA' ||
-          result.error === 'INVALID_TOKEN_FORMAT'
-        ) {
-          this.logger.log(
-            `verify: token invalid/expired with error='${result.error}', rendering expired page`,
+        // Falls Service einen harten Fehler liefert, trotzdem Error-Seite
+        if (result.error && result.error !== 'TOKEN_EXPIRED') {
+          this.logger.warn(
+            `verify: service returned error='${result.error}', rendering expired page`,
           );
           return this.renderExpiredPage(res);
         }
 
-        // Erfolg: normale Success-Seite mit Name aus Query-Param
         const userName = fallbackName;
         this.logger.log(
           `verify: rendering success page with userName='${userName}'`,
