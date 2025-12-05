@@ -288,6 +288,11 @@ export class AuthService {
         };
       }
 
+      const email: string = tokenData.email || '';
+      const rawName: string = tokenData.name || '';
+      const name: string = (rawName && rawName.trim()) || 'Nutzer';
+      const password = tokenData.password;
+
       const now = new Date();
       let expiresAt: Date;
 
@@ -306,8 +311,8 @@ export class AuthService {
           success: true,
           error: 'INVALID_TOKEN_FORMAT',
           message: 'Ungültiges Token-Format',
-          name: 'Nutzer',
-          email: '',
+          name,
+          email,
         };
       }
 
@@ -318,23 +323,19 @@ export class AuthService {
           success: true,
           error: 'TOKEN_EXPIRED',
           message: 'Token abgelaufen',
-          email: tokenData.email || '',
-          name: tokenData.name || 'Nutzer',
+          email,
+          name,
         };
       }
 
-      const email = tokenData.email;
-      const name = tokenData.name;
-      const password = tokenData.password;
-
-      if (!email || !name || !password) {
+      if (!email || !password) {
         this.logger.warn(`verifyEmailToken: missing required fields`);
         await docRef.delete().catch(() => {});
         return {
           success: true,
           error: 'MISSING_FIELDS',
           message: 'Fehlende Benutzerdaten',
-          name: name || 'Nutzer',
+          name,
           email: email || '',
         };
       }
@@ -350,14 +351,16 @@ export class AuthService {
         );
         const existingUser = userQuery.docs[0];
         const existingUserData = existingUser.data();
-        this.logger.log(`verifyEmailToken: existing user name: ${existingUserData.name}`);
+        this.logger.log(
+          `verifyEmailToken: existing user name: ${existingUserData.name}`,
+        );
         docRef.delete().catch(() => {});
         return {
           success: true,
           message: 'Account existiert und ist verifiziert.',
           userId: existingUser.id,
-          email: email,
-          name: existingUserData.name || name,
+          email,
+          name,
         };
       }
 
@@ -375,41 +378,15 @@ export class AuthService {
         `verifyEmailToken: user created with ID: ${userRef.id}`,
       );
 
-      const newUserCheck = await firestore
-        .collection('users')
-        .where('email', '==', email)
-        .get();
-
-      if (!newUserCheck.empty) {
-        const newUser = newUserCheck.docs[0];
-        const newUserData = newUser.data();
-        this.logger.log(
-          `verifyEmailToken: verified new user in database with ID: ${newUser.id}, name: ${newUserData.name}`,
-        );
-        
-        docRef.delete().catch(() => {});
-        
-        return {
-          success: true,
-          message: 'Email erfolgreich verifiziert',
-          userId: newUser.id,
-          email: email,
-          name: newUserData.name,
-        };
-      }
-
-      this.logger.warn(
-        `verifyEmailToken: fallback return after user creation`,
-      );
-      
+      // Token-Dokument löschen, Name ist bereits in Variable "name"
       docRef.delete().catch(() => {});
-      
+
       return {
         success: true,
         message: 'Email erfolgreich verifiziert',
         userId: userRef.id,
-        email: email,
-        name: name,
+        email,
+        name,
       };
     } catch (err) {
       this.logger.error(`verifyEmailToken ERROR: ${err?.message}`, err?.stack);
