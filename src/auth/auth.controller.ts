@@ -83,23 +83,15 @@ export class AuthController {
 
       this.logger.log(`verify: result: ${JSON.stringify(result)}`);
 
-      // 1. Wenn wirklich success true -> klassische Erfolgsseite
+      // EINZIGE Entscheidungsbasis: success
       if (result.success) {
         return this.renderSuccessPage(
           res,
           result.email || '',
-          result.name || '',
+          result.name || 'Nutzer',
         );
       }
 
-      // 2. Wenn kein success, aber eine Email zurückkommt,
-      //    gehen wir davon aus: Account existiert / wurde angelegt.
-      if (result.email) {
-        const name = result.name || 'Nutzer';
-        return this.renderSuccessPage(res, result.email, name);
-      }
-
-      // 3. Nur wenn weder success noch email -> Fehlerseite
       return this.renderErrorPage(
         res,
         result.error || 'UNKNOWN_ERROR',
@@ -252,11 +244,13 @@ export class AuthController {
       case 'INVALID_TOKEN_DATA':
       case 'INVALID_TOKEN_FORMAT':
         title = 'Ungültiger Link';
-        details = 'Der Verifizierungslink ist ungültig oder wurde bereits verwendet.';
+        details =
+          'Der Verifizierungslink ist ungültig oder wurde bereits verwendet.';
         break;
       case 'MISSING_FIELDS':
         title = 'Fehlerhafte Daten';
-        details = 'Die Benutzerdaten im Verifizierungslink sind unvollständig.';
+        details =
+          'Die Benutzerdaten im Verifizierungslink sind unvollständig.';
         break;
       case 'SERVER_ERROR':
         title = 'Server Fehler';
