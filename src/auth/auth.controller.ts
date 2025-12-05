@@ -129,21 +129,6 @@ export class AuthController {
             font-size: 18px;
             line-height: 1.6;
           }
-          .login-btn {
-            display: inline-block;
-            background-color: #4CAF50;
-            color: white;
-            padding: 15px 30px;
-            text-decoration: none;
-            border-radius: 5px;
-            font-size: 18px;
-            font-weight: bold;
-            transition: background-color 0.3s;
-            margin-top: 20px;
-          }
-          .login-btn:hover {
-            background-color: #45a049;
-          }
           .user-info {
             background-color: #f0f8ff;
             padding: 20px;
@@ -154,42 +139,22 @@ export class AuthController {
           .user-info p {
             margin: 10px 0;
             color: #333;
-          }
-          .info-text {
-            font-size: 14px;
-            color: #777;
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
+            font-size: 16px;
           }
         </style>
       </head>
       <body>
         <div class="container">
           <div class="success-icon">✅</div>
-          <h1>Email erfolgreich verifiziert!</h1>
+          <h1>Account erfolgreich erstellt!</h1>
           
           <div class="user-info">
-            <p><strong>Ihr Account wurde erfolgreich erstellt oder ist bereits vorhanden:</strong></p>
             <p><strong>Name:</strong> ${name}</p>
             <p><strong>Email:</strong> ${email}</p>
           </div>
           
-          <p>Ihr Account ist jetzt bereit zur Nutzung.</p>
-          <p>Sie können sich nun mit Ihren Zugangsdaten einloggen.</p>
-          
-          <a href="/login" class="login-btn">Zum Login</a>
-          
-          <div class="info-text">
-            <p>Sie werden in 5 Sekunden automatisch zum Login weitergeleitet...</p>
-          </div>
+          <p>Dein Account wurde erfolgreich erstellt und ist bereit zur Nutzung.</p>
         </div>
-        
-        <script>
-          setTimeout(function() {
-            window.location.href = '/login';
-          }, 5000);
-        </script>
       </body>
       </html>
     `;
