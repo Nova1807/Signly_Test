@@ -235,7 +235,7 @@ export class AuthService {
   }
 
   async verifyEmailToken(token: string) {
-    this.logger.log(`verifyEmailToken called with token: '${token}'`);
+    this.logger.log(`verifyEmailToken START: token='${token}'`);
     this.logger.log(`verifyEmailToken: token length: ${token.length}`);
     
     const firestore = this.firebaseApp.firestore();
@@ -272,7 +272,7 @@ export class AuthService {
         
         this.logger.log(`verifyEmailToken: total docs in collection: ${allDocs.size}`);
         
-        // Korrekte Typisierung für foundDoc
+        // Korrekte Typisierung
         let foundDoc: admin.firestore.QueryDocumentSnapshot | undefined = undefined;
         
         for (const testDoc of allDocs.docs) {
@@ -380,6 +380,8 @@ export class AuthService {
       }
 
       this.logger.log(`verifyEmailToken: SUCCESS - email ${email} verified`);
+      
+      // WICHTIG: KEINE Exception werfen bei Erfolg!
       return { 
         success: true, 
         message: 'Email erfolgreich verifiziert! Du kannst dich jetzt einloggen.',
@@ -387,7 +389,8 @@ export class AuthService {
       };
       
     } catch (err) {
-      this.logger.error(`verifyEmailToken error: ${err?.message}`, err?.stack);
+      this.logger.error(`verifyEmailToken ERROR: ${err?.message}`, err?.stack);
+      // Exception weiterwerfen
       throw err;
     }
   }
