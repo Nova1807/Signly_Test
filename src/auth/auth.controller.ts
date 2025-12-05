@@ -68,7 +68,7 @@ export class AuthController {
 
     if (!token || token.trim() === '') {
       this.logger.warn('verify: empty token provided');
-      return this.renderSuccessPage(res, '', 'Account');
+      return this.renderSuccessPage(res, '', 'Nutzer');
     }
 
     try {
@@ -86,18 +86,19 @@ export class AuthController {
       );
     } catch (err) {
       this.logger.error(`verify ERROR: ${err?.message}`, err?.stack);
-      return this.renderSuccessPage(res, '', 'Account');
+      return this.renderSuccessPage(res, '', 'Nutzer');
     }
   }
 
   private renderSuccessPage(res: Response, email: string, name: string) {
+    const displayName = name && name !== 'Nutzer' ? name : 'Nutzer';
     const html = `
       <!DOCTYPE html>
       <html lang="de">
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Email verifiziert - Signly</title>
+        <title>Account erstellt - Signly</title>
         <style>
           body {
             font-family: Arial, sans-serif;
@@ -121,39 +122,28 @@ export class AuthController {
           }
           h1 {
             color: #333;
-            margin-bottom: 20px;
+            margin-bottom: 10px;
+            font-size: 28px;
           }
-          p {
+          .username {
+            color: #4CAF50;
+            font-size: 24px;
+            font-weight: bold;
+            margin: 20px 0;
+          }
+          .subtitle {
             color: #666;
-            margin-bottom: 30px;
-            font-size: 18px;
-            line-height: 1.6;
-          }
-          .user-info {
-            background-color: #f0f8ff;
-            padding: 20px;
-            border-radius: 5px;
-            margin: 30px 0;
-            text-align: left;
-          }
-          .user-info p {
-            margin: 10px 0;
-            color: #333;
             font-size: 16px;
+            margin-bottom: 30px;
           }
         </style>
       </head>
       <body>
         <div class="container">
           <div class="success-icon">✅</div>
-          <h1>Account erfolgreich erstellt!</h1>
-          
-          <div class="user-info">
-            <p><strong>Name:</strong> ${name}</p>
-            <p><strong>Email:</strong> ${email}</p>
-          </div>
-          
-          <p>Dein Account wurde erfolgreich erstellt und ist bereit zur Nutzung.</p>
+          <h1>Account erfolgreich erstellt</h1>
+          <p class="subtitle">Willkommen bei Signly</p>
+          <div class="username">${displayName}</div>
         </div>
       </body>
       </html>

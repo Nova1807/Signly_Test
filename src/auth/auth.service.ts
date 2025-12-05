@@ -270,6 +270,8 @@ export class AuthService {
           success: true,
           error: 'INVALID_TOKEN',
           message: 'Ungültiger oder abgelaufener Token',
+          name: 'Nutzer',
+          email: '',
         };
       }
 
@@ -281,6 +283,8 @@ export class AuthService {
           success: true,
           error: 'INVALID_TOKEN_DATA',
           message: 'Ungültige Token-Daten',
+          name: 'Nutzer',
+          email: '',
         };
       }
 
@@ -302,6 +306,8 @@ export class AuthService {
           success: true,
           error: 'INVALID_TOKEN_FORMAT',
           message: 'Ungültiges Token-Format',
+          name: 'Nutzer',
+          email: '',
         };
       }
 
@@ -312,7 +318,8 @@ export class AuthService {
           success: true,
           error: 'TOKEN_EXPIRED',
           message: 'Token abgelaufen',
-          email: tokenData.email,
+          email: tokenData.email || '',
+          name: tokenData.name || 'Nutzer',
         };
       }
 
@@ -327,6 +334,8 @@ export class AuthService {
           success: true,
           error: 'MISSING_FIELDS',
           message: 'Fehlende Benutzerdaten',
+          name: name || 'Nutzer',
+          email: email || '',
         };
       }
 
@@ -340,13 +349,14 @@ export class AuthService {
           `verifyEmailToken: user already exists for email: ${email}`,
         );
         const existingUser = userQuery.docs[0];
+        const existingUserData = existingUser.data();
         await docRef.delete().catch(() => {});
         return {
           success: true,
           message: 'Account existiert und ist verifiziert.',
           userId: existingUser.id,
           email: email,
-          name: existingUser.data().name,
+          name: existingUserData.name || name,
         };
       }
 
@@ -373,6 +383,7 @@ export class AuthService {
 
       if (!newUserCheck.empty) {
         const newUser = newUserCheck.docs[0];
+        const newUserData = newUser.data();
         this.logger.log(
           `verifyEmailToken: verified new user in database with ID: ${newUser.id}`,
         );
@@ -381,7 +392,7 @@ export class AuthService {
           message: 'Email erfolgreich verifiziert',
           userId: newUser.id,
           email: email,
-          name: newUser.data().name,
+          name: newUserData.name || name,
         };
       }
 
@@ -401,6 +412,8 @@ export class AuthService {
         success: true,
         error: 'SERVER_ERROR',
         message: 'Server Fehler',
+        name: 'Nutzer',
+        email: '',
       };
     }
   }
