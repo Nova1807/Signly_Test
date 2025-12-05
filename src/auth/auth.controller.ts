@@ -83,7 +83,6 @@ export class AuthController {
 
       this.logger.log(`verify: result: ${JSON.stringify(result)}`);
 
-      // EINZIGE Entscheidungsbasis: success
       if (result.success) {
         return this.renderSuccessPage(
           res,

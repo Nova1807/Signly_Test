@@ -31,7 +31,6 @@ export class AuthService {
       const firestore = this.firebaseApp.firestore();
       this.logger.log('signup: got firestore instance');
 
-      // 1. Email in USERS collection prüfen
       const emailRef = firestore.collection('users').where('email', '==', email);
       const emailSnapshot = await emailRef.get();
       this.logger.log(
@@ -43,7 +42,6 @@ export class AuthService {
         throw new BadRequestException('Diese Email hat bereits einen Account');
       }
 
-      // 2. Username in USERS collection prüfen
       const nameRef = firestore.collection('users').where('name', '==', name);
       const nameSnapshot = await nameRef.get();
       this.logger.log(
@@ -57,11 +55,9 @@ export class AuthService {
         );
       }
 
-      // 3. Passwort hashen
       const hashedPassword = await bcrypt.hash(password, 10);
       this.logger.log('signup: password hashed');
 
-      // 4. Alte Token für diese Email löschen
       const oldTokensQuery = await firestore
         .collection('emailVerifications')
         .where('email', '==', email)
@@ -77,7 +73,6 @@ export class AuthService {
         await Promise.all(deletePromises);
       }
 
-      // 5. NEUEN Token erzeugen (15 Minuten)
       const token = uuidv4();
       const createdAt = new Date();
       const expiresAt = new Date(createdAt.getTime() + 15 * 60 * 1000);
@@ -86,7 +81,6 @@ export class AuthService {
       this.logger.log(`signup: token expires at ${expiresAt.toISOString()}`);
       this.logger.log(`signup: server time: ${createdAt.toISOString()}`);
 
-      // 6. Token als DOCUMENT ID speichern
       await firestore.collection('emailVerifications').doc(token).set({
         name,
         email,
@@ -99,7 +93,6 @@ export class AuthService {
         'signup: email verification document created with token as document ID',
       );
 
-      // 7. Mail senden MIT URL ENCODING
       await this.sendVerificationEmail(email, token);
       this.logger.log('signup: verification email sent');
 
@@ -256,13 +249,11 @@ export class AuthService {
     const firestore = this.firebaseApp.firestore();
 
     try {
-      // Token URL-decoden
       let decodedToken = token;
       try {
         decodedToken = decodeURIComponent(token);
       } catch {}
 
-      // 1. Token-Dokument holen
       let docRef = firestore
         .collection('emailVerifications')
         .doc(decodedToken);
@@ -273,7 +264,6 @@ export class AuthService {
         doc = await docRef.get();
       }
 
-      // Wenn Token nicht existiert -> Fehler
       if (!doc.exists) {
         this.logger.error(`verifyEmailToken: document not found`);
         return {
@@ -294,7 +284,6 @@ export class AuthService {
         };
       }
 
-      // 2. Ablaufzeit prüfen
       const now = new Date();
       let expiresAt: Date;
 
@@ -341,26 +330,26 @@ export class AuthService {
         };
       }
 
-      // 3. Prüfen ob Email schon registriert ist
-      const emailCheck = await firestore
+      const userQuery = await firestore
         .collection('users')
         .where('email', '==', email)
         .get();
 
-      if (!emailCheck.empty) {
-        // Email existiert schon -> Erfolg
-        this.logger.log(`verifyEmailToken: email already exists: ${email}`);
+      if (!userQuery.empty) {
+        this.logger.log(
+          `verifyEmailToken: user already exists for email: ${email}`,
+        );
+        const existingUser = userQuery.docs[0];
         await docRef.delete().catch(() => {});
         return {
           success: true,
-          message: 'Email war bereits verifiziert.',
-          userId: emailCheck.docs[0].id,
+          message: 'Account existiert und ist verifiziert.',
+          userId: existingUser.id,
           email: email,
-          name: emailCheck.docs[0].data().name,
+          name: existingUser.data().name,
         };
       }
 
-      // 4. User anlegen
       this.logger.log(`verifyEmailToken: creating user for email: ${email}`);
       const userRef = await firestore.collection('users').add({
         name,
@@ -375,12 +364,30 @@ export class AuthService {
         `verifyEmailToken: user created with ID: ${userRef.id}`,
       );
 
-      // 5. Token löschen (im Hintergrund, nicht warten)
-      docRef.delete().catch(() => {
-        this.logger.error('verifyEmailToken: error deleting token doc');
-      });
+      docRef.delete().catch(() => {});
 
-      // 6. IMMER success true nach User-Erstellung
+      const newUserCheck = await firestore
+        .collection('users')
+        .where('email', '==', email)
+        .get();
+
+      if (!newUserCheck.empty) {
+        const newUser = newUserCheck.docs[0];
+        this.logger.log(
+          `verifyEmailToken: verified new user in database with ID: ${newUser.id}`,
+        );
+        return {
+          success: true,
+          message: 'Email erfolgreich verifiziert',
+          userId: newUser.id,
+          email: email,
+          name: newUser.data().name,
+        };
+      }
+
+      this.logger.warn(
+        `verifyEmailToken: fallback return after user creation`,
+      );
       return {
         success: true,
         message: 'Email erfolgreich verifiziert',
@@ -393,7 +400,7 @@ export class AuthService {
       return {
         success: false,
         error: 'SERVER_ERROR',
-        message: 'Server Fehler bei der Verifizierung',
+        message: 'Server Fehler',
       };
     }
   }
@@ -401,7 +408,6 @@ export class AuthService {
   private async sendVerificationEmail(email: string, token: string) {
     this.logger.log(`sendVerificationEmail start: email=${email}`);
 
-    // Token URL-encoden für sichere Übertragung
     const encodedToken = encodeURIComponent(token);
     this.logger.log(`sendVerificationEmail: raw token=${token}`);
     this.logger.log(`sendVerificationEmail: encoded token=${encodedToken}`);
@@ -419,7 +425,6 @@ export class AuthService {
       },
     });
 
-    // WICHTIG: encodedToken in URL verwenden
     const verifyUrl = `https://signly-test-346744939652.europe-west1.run.app/auth/verify?token=${encodedToken}`;
     this.logger.log(`sendVerificationEmail: verify URL: ${verifyUrl}`);
 
