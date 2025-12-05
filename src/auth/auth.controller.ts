@@ -79,9 +79,14 @@ export class AuthController {
 
       this.logger.log(`verify: result: ${JSON.stringify(result)}`);
 
-      const userName = result.name && result.name.trim() ? result.name : 'Nutzer';
+      // Robuster Name-Fallback: erst result.name, dann Prefix aus E-Mail, dann "Nutzer"
+      const rawName = (result.name || '').trim();
+      const emailPrefix =
+        (result.email && result.email.split('@')[0]) || '';
+      const userName = rawName || emailPrefix || 'Nutzer';
+
       this.logger.log(`verify: displaying name: ${userName}`);
-      
+
       return this.renderSuccessPage(res, userName);
     } catch (err) {
       this.logger.error(`verify ERROR: ${err?.message}`, err?.stack);
