@@ -359,7 +359,7 @@ export class AuthController {
         </style>
       </head>
       <body>
-        nvas id="confettii-canvas"></canvas>
+        <canvas id="confettii-canvas"></canvas>
 
         <main class="card" role="main" aria-label="Bestätigung deiner E-Mail-Adresse">
           <div class="card-inner">
