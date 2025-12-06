@@ -224,6 +224,8 @@ export class AuthController {
 
           .logo img {
             display: block;
+            height: 36px;
+            width: auto;
           }
 
           .brand-name {
@@ -253,6 +255,13 @@ export class AuthController {
 
           .hero-illustration {
             flex: 0 0 160px;
+          }
+
+          .hero-illustration img {
+            display: block;
+            max-width: 160px;
+            width: 100%;
+            height: auto;
           }
 
           .hero-copy {
@@ -359,9 +368,8 @@ export class AuthController {
                 <img
                   src="${assetsBaseUrl}/Logo.png"
                   alt="Signly Logo"
-                  width="120"
-                  height="36"
-                  style="height: 36px; width: auto; display: block;"
+                  style="height: 36px; width: auto;"
+                  loading="eager"
                 />
                 <span class="brand-name">ignly</span>
               </div>
@@ -373,9 +381,8 @@ export class AuthController {
                 <img
                   src="${assetsBaseUrl}/Maskotchen.png"
                   alt="Signly Maskottchen"
-                  width="240"
-                  height="240"
                   style="max-width: 240px; width: 100%; height: auto; display: block;"
+                  loading="eager"
                 />
               </div>
               <div class="hero-copy">
@@ -503,7 +510,6 @@ export class AuthController {
       </body>
       </html>
     `;
-    res.type('html'); // Content-Type explizit setzen[web:95]
     return res.send(html);
   }
 
@@ -582,6 +588,8 @@ export class AuthController {
 
           .logo img {
             display: block;
+            height: 32px;
+            width: auto;
           }
 
           .brand-name {
@@ -662,6 +670,9 @@ export class AuthController {
 
           .mascot img {
             display: inline-block;
+            max-height: 72px;
+            height: 72px;
+            width: auto;
           }
 
           @media (max-width: 520px) {
@@ -691,9 +702,8 @@ export class AuthController {
                 <img
                   src="${assetsBaseUrl}/Logo.png"
                   alt="Signly Logo"
-                  width="120"
-                  height="36"
-                  style="height: 36px; width: auto; display: block;"
+                  style="height: 36px; width: auto;"
+                  loading="eager"
                 />
                 <span class="brand-name">Signly</span>
               </div>
@@ -713,9 +723,7 @@ export class AuthController {
               <img
                 src="${assetsBaseUrl}/Maskotchen.png"
                 alt="Signly Maskottchen"
-                width="160"
-                height="160"
-                style="max-height: 72px; height: 72px; width: auto; display: inline-block;"
+                loading="eager"
               />
             </div>
           </div>
@@ -723,7 +731,6 @@ export class AuthController {
       </body>
       </html>
     `;
-    res.type('html'); // Antwort als HTML kennzeichnen[web:95]
     return res.status(400).send(html);
   }
 }
