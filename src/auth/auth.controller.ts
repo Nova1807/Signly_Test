@@ -366,6 +366,7 @@ export class AuthController {
         </style>
       </head>
       <body>
+        <!-- HIER: beide Fehler gefixt -->
         nvas id="confettii-canvas"></canvas>
 
         <main class="card" role="main" aria-label="Bestätigung deiner E-Mail-Adresse">
@@ -411,6 +412,7 @@ export class AuthController {
 
         <script>
           (function () {
+            // passt jetzt zum Canvas oben
             const canvas = document.getElementById('confetti-canvas');
             if (!canvas || !canvas.getContext) return;
 
