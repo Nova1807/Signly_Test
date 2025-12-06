@@ -397,9 +397,6 @@ export class AuthController {
                 <p class="hint">
                   Du kannst dieses Fenster jetzt schließen, merke dir nur deine Anmeldedaten.
                 </p>
-                <p class="secondary">
-                  Wenn du diese Registrierung nicht selbst ausgelöst hast, kannst du diese Nachricht ignorieren.
-                </p>
               </div>
             </section>
           </div>
@@ -425,9 +422,9 @@ export class AuthController {
 
             const colors = ['#a6f9fd', '#3b82c4', '#073b4c', '#facc15'];
             const confettiCount = 120;
-            const gravity = 0.45;
-            const terminalVelocity = 6;
-            const drag = 0.03;
+            const gravity = 0.25;
+            const terminalVelocity = 4;
+            const drag = 0.02;
 
             const randomRange = (min, max) => Math.random() * (max - min) + min;
 
@@ -446,14 +443,14 @@ export class AuthController {
                 rotation: randomRange(0, 2 * Math.PI),
                 velocity: {
                   x: randomRange(-2.5, 2.5),
-                  y: randomRange(2, 4.5),
+                  y: randomRange(1, 2.5),
                 },
                 opacity: 1,
-                decay: randomRange(0.008, 0.018),
+                decay: randomRange(0.003, 0.008),
               });
             }
 
-            const duration = 2500;
+            const duration = 6000;
             const startTime = performance.now();
 
             const render = (time) => {
@@ -719,9 +716,6 @@ export class AuthController {
               <p class="subtitle">
                 Der Link ist abgelaufen oder wurde bereits verwendet.
                 Bitte fordere einen neuen Bestätigungslink an, um deine E-Mail-Adresse zu verifizieren.
-              </p>
-              <p class="hint">
-                Wenn du diese Anfrage nicht kennst, kannst du diese Nachricht einfach ignorieren.
               </p>
             </section>
 
