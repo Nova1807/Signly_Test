@@ -258,9 +258,10 @@ export class AuthController {
           }
 
           .hero-illustration img {
-            width: 100%;
-            max-width: 160px;
             display: block;
+            max-width: 160px;
+            width: 100%;
+            height: auto;
           }
 
           .hero-copy {
@@ -367,8 +368,7 @@ export class AuthController {
                 <img
                   src="${assetsBaseUrl}/Logo.png"
                   alt="Signly Logo"
-                  width="120"
-                  height="36"
+                  style="height: 36px; width: auto;"
                   loading="eager"
                 />
                 <span class="brand-name">ignly</span>
@@ -381,8 +381,7 @@ export class AuthController {
                 <img
                   src="${assetsBaseUrl}/Maskotchen.png"
                   alt="Signly Maskottchen"
-                  width="240"
-                  height="240"
+                  style="max-width: 240px; width: 100%; height: auto; display: block;"
                   loading="eager"
                 />
               </div>
@@ -426,9 +425,9 @@ export class AuthController {
 
             const colors = ['#a6f9fd', '#3b82c4', '#073b4c', '#facc15'];
             const confettiCount = 120;
-            const gravity = 0.25;
-            const terminalVelocity = 4;
-            const drag = 0.02;
+            const gravity = 0.45;
+            const terminalVelocity = 6;
+            const drag = 0.03;
 
             const randomRange = (min, max) => Math.random() * (max - min) + min;
 
@@ -446,9 +445,11 @@ export class AuthController {
                 },
                 rotation: randomRange(0, 2 * Math.PI),
                 velocity: {
-                  x: randomRange(-2, 2),
-                  y: randomRange(1, 3),
+                  x: randomRange(-2.5, 2.5),
+                  y: randomRange(2, 4.5),
                 },
+                opacity: 1,
+                decay: randomRange(0.008, 0.018),
               });
             }
 
@@ -460,8 +461,7 @@ export class AuthController {
               ctx.clearRect(0, 0, width, height);
 
               confetti.forEach((confetto) => {
-                const { x, y } = confetto.position;
-                const { x: w, y: h } = confetto.dimensions;
+                if (confetto.opacity <= 0) return;
 
                 confetto.velocity.x -= confetto.velocity.x * drag;
                 confetto.velocity.y = Math.min(
@@ -472,21 +472,32 @@ export class AuthController {
                 confetto.position.x += confetto.velocity.x;
                 confetto.position.y += confetto.velocity.y;
 
-                if (confetto.position.y >= height) confetto.position.y = -10;
+                confetto.opacity -= confetto.decay;
+
+                if (confetto.position.y >= height) {
+                  confetto.position.y = height + 20;
+                }
                 if (confetto.position.x > width) confetto.position.x = 0;
                 if (confetto.position.x < 0) confetto.position.x = width;
 
                 confetto.rotation += confetto.velocity.x * 0.02;
 
                 ctx.save();
+                ctx.globalAlpha = Math.max(confetto.opacity, 0);
                 ctx.translate(confetto.position.x, confetto.position.y);
                 ctx.rotate(confetto.rotation);
                 ctx.fillStyle = confetto.color;
-                ctx.fillRect(-w / 2, -h / 2, w, h);
+                ctx.fillRect(
+                  -confetto.dimensions.x / 2,
+                  -confetto.dimensions.y / 2,
+                  confetto.dimensions.x,
+                  confetto.dimensions.y
+                );
                 ctx.restore();
               });
 
-              if (elapsed < duration) {
+              const allInvisible = confetti.every((c) => c.opacity <= 0);
+              if (elapsed < duration && !allInvisible) {
                 requestAnimationFrame(render);
               } else {
                 ctx.clearRect(0, 0, width, height);
@@ -661,6 +672,8 @@ export class AuthController {
           }
 
           .mascot img {
+            display: inline-block;
+            max-height: 72px;
             height: 72px;
             width: auto;
           }
@@ -692,8 +705,7 @@ export class AuthController {
                 <img
                   src="${assetsBaseUrl}/Logo.png"
                   alt="Signly Logo"
-                  width="120"
-                  height="36"
+                  style="height: 36px; width: auto;"
                   loading="eager"
                 />
                 <span class="brand-name">Signly</span>
@@ -717,8 +729,6 @@ export class AuthController {
               <img
                 src="${assetsBaseUrl}/Maskotchen.png"
                 alt="Signly Maskottchen"
-                width="180"
-                height="180"
                 loading="eager"
               />
             </div>
