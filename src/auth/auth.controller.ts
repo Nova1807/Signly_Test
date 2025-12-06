@@ -172,8 +172,14 @@ export class AuthController {
             box-sizing: border-box;
           }
 
-          body {
+          html, body {
             margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+          }
+
+          body {
             min-height: 100vh;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
             background: radial-gradient(circle at top left, #e0f7ff 0, #f4fbff 45%, #ffffff 100%);
@@ -359,7 +365,7 @@ export class AuthController {
         </style>
       </head>
       <body>
-        <canvas id="confettii-canvas"></canvas>
+        <canvas id="confetti-canvas"></canvas>
 
         <main class="card" role="main" aria-label="Bestätigung deiner E-Mail-Adresse">
           <div class="card-inner">
@@ -381,7 +387,7 @@ export class AuthController {
                 <img
                   src="${assetsBaseUrl}/Maskotchen.png"
                   alt="Signly Maskottchen"
-                  style="max-width: 240px; width: 100%; height: auto; display: block;"
+                  style="max-width: 160px; width: 100%; height: auto; display: block;"
                   loading="eager"
                 />
               </div>
@@ -705,7 +711,7 @@ export class AuthController {
                   style="height: 36px; width: auto;"
                   loading="eager"
                 />
-                <span class="brand-name">Signly</span>
+                <span class="brand-name">ignly</span>
               </div>
               <div class="pill">Link abgelaufen</div>
             </header>
