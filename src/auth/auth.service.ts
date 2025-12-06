@@ -459,7 +459,7 @@ export class AuthService {
                       <a href="${verifyUrl}"
                          style="
                            display:inline-block;
-                           background-color:#73c5f5;
+                           background-color:#a6f9fd;
                            color:#0b2135;
                            font-family:Arial, sans-serif;
                            font-size:15px;
