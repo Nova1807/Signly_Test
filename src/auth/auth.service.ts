@@ -414,27 +414,23 @@ export class AuthService {
                 <table width="100%" cellspacing="0" cellpadding="0" 
                        style="max-width:600px; background-color:#ffffff; border-radius:16px; 
                               box-shadow:0 10px 25px rgba(0,0,0,0.06); padding:24px 24px 28px;">
-                  <!-- Logo + Maskottchen nebeneinander -->
+                  
+                  <!-- Top-Bar mit kleinem Logo links -->
+                  <tr>
+                    <td align="left"
+                        style="padding-bottom:12px; font-family:Arial, sans-serif;">
+                      <img src="${assetsBaseUrl}/Logo.png"
+                           alt="Signly Logo"
+                           style="display:block; max-width:120px; height:auto; border:0; outline:none; text-decoration:none;" />
+                    </td>
+                  </tr>
+
+                  <!-- Großes Maskottchen mittig -->
                   <tr>
                     <td align="center" style="padding-bottom:16px;">
-                      <table cellspacing="0" cellpadding="0" style="margin:0 auto;">
-                        <tr>
-                          <td align="right" style="padding-right:8px;">
-                            <img src="${assetsBaseUrl}/Logo.png"
-                                 alt="Signly Logo"
-                                 width="120"
-                                 height="40"
-                                 style="display:block; border:0; outline:none; text-decoration:none;" />
-                          </td>
-                          <td align="left" style="padding-left:8px;">
-                            <img src="${assetsBaseUrl}/Maskotchen.png"
-                                 alt="Signly Maskottchen"
-                                 width="80"
-                                 height="80"
-                                 style="display:block; border:0; outline:none; text-decoration:none;" />
-                          </td>
-                        </tr>
-                      </table>
+                      <img src="${assetsBaseUrl}/Maskotchen.png"
+                           alt="Signly Maskottchen"
+                           style="display:block; max-width:180px; height:auto; border:0; outline:none; text-decoration:none;" />
                     </td>
                   </tr>
 
