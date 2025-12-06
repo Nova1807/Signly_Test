@@ -15,17 +15,14 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import type { Response } from 'express';
 import * as admin from 'firebase-admin';
 
-
 @Controller('auth')
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
-
 
   constructor(
     private readonly authService: AuthService,
     @Inject('FIREBASE_APP') private firebaseApp: admin.app.App,
   ) {}
-
 
   @Post('signup')
   async signUp(@Body() signupData: SignupDto) {
@@ -40,7 +37,6 @@ export class AuthController {
     }
   }
 
-
   @Post('login')
   async login(@Body() credentials: LoginDto) {
     this.logger.log(`login called with body: ${JSON.stringify(credentials)}`);
@@ -53,7 +49,6 @@ export class AuthController {
       throw err;
     }
   }
-
 
   @Post('refresh')
   async refreshtoken(@Body() refreshtokenDto: RefreshTokenDto) {
@@ -72,7 +67,6 @@ export class AuthController {
     }
   }
 
-
   @Get('verify')
   async verify(
     @Query('token') token: string,
@@ -83,30 +77,24 @@ export class AuthController {
       `VERIFY ENDPOINT CALLED with token: ${token}, nameQuery: ${nameQuery}`,
     );
 
-
     const decodedName = nameQuery ? decodeURIComponent(nameQuery).trim() : '';
     const fallbackName = decodedName || 'Nutzer';
-
 
     if (!token || token.trim() === '') {
       this.logger.warn('verify: empty token provided');
       return this.renderExpiredPage(res);
     }
 
-
     try {
       const firestore = this.firebaseApp.firestore();
 
-
       const docRef = firestore.collection('emailVerifications').doc(token);
       const doc = await docRef.get();
-
 
       if (!doc.exists) {
         this.logger.warn('verify: emailVerifications doc not found');
         return this.renderExpiredPage(res);
       }
-
 
       const data = doc.data() as any;
       if (!data || !data.expiresAt) {
@@ -114,24 +102,20 @@ export class AuthController {
         return this.renderExpiredPage(res);
       }
 
-
       const expiresAt: Date =
         typeof data.expiresAt.toDate === 'function'
           ? data.expiresAt.toDate()
           : new Date(data.expiresAt);
-
 
       const now = new Date();
       this.logger.log(
         `verify: expiresAt=${expiresAt.toISOString()}, now=${now.toISOString()}`,
       );
 
-
       if (expiresAt.getTime() < now.getTime()) {
         this.logger.log('verify: token expired (controller check)');
         return this.renderExpiredPage(res);
       }
-
 
       this.logger.log(
         `verify: token still valid, calling authService.verifyEmailToken('${token}')`,
@@ -139,14 +123,12 @@ export class AuthController {
       const result = await this.authService.verifyEmailToken(token);
       this.logger.log(`verify: result: ${JSON.stringify(result)}`);
 
-
       if (!result.success) {
         this.logger.warn(
           `verify: service returned error='${result.error}', rendering expired page`,
         );
         return this.renderExpiredPage(res);
       }
-
 
       const userName = fallbackName;
       this.logger.log(
@@ -159,17 +141,14 @@ export class AuthController {
     }
   }
 
-
   private renderSuccessPage(res: Response, name: string) {
     const safeName = (name || '')
       .toString()
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
 
-
     const baseUrl = 'https://signly-test-346744939652.europe-west1.run.app';
     const assetsBaseUrl = `${baseUrl}/email-assets`;
-
 
     const html = `
       <!DOCTYPE html>
@@ -189,11 +168,9 @@ export class AuthController {
             --text-muted: #4a5568;
           }
 
-
           * {
             box-sizing: border-box;
           }
-
 
           html, body {
             margin: 0;
@@ -201,7 +178,6 @@ export class AuthController {
             width: 100%;
             height: 100%;
           }
-
 
           body {
             min-height: 100vh;
@@ -212,7 +188,6 @@ export class AuthController {
             justify-content: center;
             padding: 24px;
           }
-
 
           .card {
             width: 100%;
@@ -225,7 +200,6 @@ export class AuthController {
             overflow: hidden;
           }
 
-
           .card::before {
             content: "";
             position: absolute;
@@ -235,12 +209,10 @@ export class AuthController {
             pointer-events: none;
           }
 
-
           .card-inner {
             position: relative;
             z-index: 1;
           }
-
 
           .card-header {
             display: flex;
@@ -250,13 +222,11 @@ export class AuthController {
             margin-bottom: 12px;
           }
 
-
           .logo {
             display: flex;
             align-items: center;
             gap: 2px;
           }
-
 
           .logo img {
             display: block;
@@ -264,16 +234,14 @@ export class AuthController {
             width: auto;
           }
 
-
           .brand-name {
             font-weight: 700;
             letter-spacing: 0.03em;
             font-size: 14px;
             text-transform: uppercase;
             color: var(--primary);
-            margin-top: 3px;
+            margin-top: 8px;
           }
-
 
           .pill {
             font-size: 11px;
@@ -284,7 +252,6 @@ export class AuthController {
             color: var(--text-muted);
           }
 
-
           .hero {
             display: flex;
             flex-direction: row;
@@ -293,11 +260,9 @@ export class AuthController {
             margin-top: 8px;
           }
 
-
           .hero-illustration {
             flex: 0 0 160px;
           }
-
 
           .hero-illustration img {
             display: block;
@@ -306,12 +271,10 @@ export class AuthController {
             height: auto;
           }
 
-
           .hero-copy {
             flex: 1;
             text-align: left;
           }
-
 
           .status-icon {
             width: 40px;
@@ -324,7 +287,6 @@ export class AuthController {
             margin-bottom: 8px;
             border: 1px solid var(--accent-border);
           }
-
 
           .status-icon::before {
             content: "";
@@ -339,20 +301,17 @@ export class AuthController {
             box-shadow: 0 0 0 2px rgba(255,255,255,0.9);
           }
 
-
           h1 {
             margin: 0 0 6px;
             font-size: 22px;
             color: var(--primary);
           }
 
-
           .subtitle {
             margin: 0 0 10px;
             font-size: 14px;
             color: var(--text-muted);
           }
-
 
           .username {
             margin: 4px 0 16px;
@@ -361,20 +320,17 @@ export class AuthController {
             color: var(--text-main);
           }
 
-
           .hint {
             font-size: 13px;
             color: var(--text-muted);
             margin: 0 0 4px;
           }
 
-
           .secondary {
             font-size: 11px;
             color: #9ca3af;
             margin: 10px 0 0;
           }
-
 
           #confetti-canvas {
             position: fixed;
@@ -385,28 +341,23 @@ export class AuthController {
             z-index: 999;
           }
 
-
           @media (max-width: 520px) {
             body {
               padding: 16px;
             }
 
-
             .card {
               padding: 22px 18px 18px;
             }
-
 
             .hero {
               flex-direction: column;
               text-align: center;
             }
 
-
             .hero-copy {
               text-align: center;
             }
-
 
             .card-header {
               flex-direction: row;
@@ -415,8 +366,7 @@ export class AuthController {
         </style>
       </head>
       <body>
-        <canvas id="confetti-canvas"></canvas>
-
+        nvas id="confettii-canvas"></canvas>
 
         <main class="card" role="main" aria-label="Bestätigung deiner E-Mail-Adresse">
           <div class="card-inner">
@@ -432,7 +382,6 @@ export class AuthController {
               </div>
               <div class="pill">E-Mail bestätigt</div>
             </header>
-
 
             <section class="hero">
               <div class="hero-illustration" aria-hidden="true">
@@ -460,19 +409,16 @@ export class AuthController {
           </div>
         </main>
 
-
         <script>
           (function () {
             const canvas = document.getElementById('confetti-canvas');
             if (!canvas || !canvas.getContext) return;
-
 
             const ctx = canvas.getContext('2d');
             let width = window.innerWidth;
             let height = window.innerHeight;
             canvas.width = width;
             canvas.height = height;
-
 
             window.addEventListener('resize', () => {
               width = window.innerWidth;
@@ -481,16 +427,13 @@ export class AuthController {
               canvas.height = height;
             });
 
-
             const colors = ['#a6f9fd', '#3b82c4', '#073b4c', '#facc15'];
             const confettiCount = 120;
             const gravity = 0.25;
             const terminalVelocity = 4;
             const drag = 0.02;
 
-
             const randomRange = (min, max) => Math.random() * (max - min) + min;
-
 
             const confetti = [];
             for (let i = 0; i < confettiCount; i++) {
@@ -514,19 +457,15 @@ export class AuthController {
               });
             }
 
-
             const duration = 6000;
             const startTime = performance.now();
-
 
             const render = (time) => {
               const elapsed = time - startTime;
               ctx.clearRect(0, 0, width, height);
 
-
               confetti.forEach((confetto) => {
                 if (confetto.opacity <= 0) return;
-
 
                 confetto.velocity.x -= confetto.velocity.x * drag;
                 confetto.velocity.y = Math.min(
@@ -534,13 +473,10 @@ export class AuthController {
                   terminalVelocity
                 );
 
-
                 confetto.position.x += confetto.velocity.x;
                 confetto.position.y += confetto.velocity.y;
 
-
                 confetto.opacity -= confetto.decay;
-
 
                 if (confetto.position.y >= height) {
                   confetto.position.y = height + 20;
@@ -548,9 +484,7 @@ export class AuthController {
                 if (confetto.position.x > width) confetto.position.x = 0;
                 if (confetto.position.x < 0) confetto.position.x = width;
 
-
                 confetto.rotation += confetto.velocity.x * 0.02;
-
 
                 ctx.save();
                 ctx.globalAlpha = Math.max(confetto.opacity, 0);
@@ -566,7 +500,6 @@ export class AuthController {
                 ctx.restore();
               });
 
-
               const allInvisible = confetti.every((c) => c.opacity <= 0);
               if (elapsed < duration && !allInvisible) {
                 requestAnimationFrame(render);
@@ -578,7 +511,6 @@ export class AuthController {
               }
             };
 
-
             requestAnimationFrame(render);
           })();
         </script>
@@ -588,11 +520,9 @@ export class AuthController {
     return res.send(html);
   }
 
-
   private renderExpiredPage(res: Response) {
     const baseUrl = 'https://signly-test-346744939652.europe-west1.run.app';
     const assetsBaseUrl = `${baseUrl}/email-assets`;
-
 
     const html = `
       <!DOCTYPE html>
@@ -610,11 +540,9 @@ export class AuthController {
             --text-muted: #4a5568;
           }
 
-
           * {
             box-sizing: border-box;
           }
-
 
           body {
             margin: 0;
@@ -627,7 +555,6 @@ export class AuthController {
             padding: 24px;
           }
 
-
           .card {
             width: 100%;
             max-width: 480px;
@@ -639,7 +566,6 @@ export class AuthController {
             overflow: hidden;
           }
 
-
           .card::before {
             content: "";
             position: absolute;
@@ -648,12 +574,10 @@ export class AuthController {
             pointer-events: none;
           }
 
-
           .card-inner {
             position: relative;
             z-index: 1;
           }
-
 
           .card-header {
             display: flex;
@@ -663,13 +587,11 @@ export class AuthController {
             margin-bottom: 10px;
           }
 
-
           .logo {
             display: flex;
             align-items: center;
             gap: 2px;
           }
-
 
           .logo img {
             display: block;
@@ -677,16 +599,14 @@ export class AuthController {
             width: auto;
           }
 
-
           .brand-name {
             font-weight: 700;
             letter-spacing: 0.03em;
             font-size: 13px;
             text-transform: uppercase;
             color: var(--text-main);
-            margin-top: 3px;
+            margin-top: 8px;
           }
-
 
           .pill {
             font-size: 11px;
@@ -697,12 +617,10 @@ export class AuthController {
             color: #b91c1c;
           }
 
-
           .hero {
             margin-top: 8px;
             text-align: left;
           }
-
 
           .status-icon {
             width: 40px;
@@ -717,7 +635,6 @@ export class AuthController {
             position: relative;
           }
 
-
           .status-icon::before,
           .status-icon::after {
             content: "";
@@ -728,16 +645,13 @@ export class AuthController {
             border-radius: 999px;
           }
 
-
           .status-icon::before {
             transform: rotate(45deg);
           }
 
-
           .status-icon::after {
             transform: rotate(-45deg);
           }
-
 
           h1 {
             margin: 0 0 8px;
@@ -745,13 +659,11 @@ export class AuthController {
             color: var(--text-main);
           }
 
-
           .subtitle {
             color: var(--text-muted);
             font-size: 14px;
             margin: 0 0 10px;
           }
-
 
           .hint {
             color: #9ca3af;
@@ -759,12 +671,10 @@ export class AuthController {
             margin: 0;
           }
 
-
           .mascot {
             margin-top: 18px;
             text-align: right;
           }
-
 
           .mascot img {
             display: inline-block;
@@ -773,22 +683,18 @@ export class AuthController {
             width: auto;
           }
 
-
           @media (max-width: 520px) {
             body {
               padding: 16px;
             }
 
-
             .card {
               padding: 22px 18px 18px;
             }
 
-
             .hero {
               text-align: left;
             }
-
 
             .mascot {
               text-align: center;
@@ -812,7 +718,6 @@ export class AuthController {
               <div class="pill">Link abgelaufen</div>
             </header>
 
-
             <section class="hero">
               <div class="status-icon" aria-hidden="true"></div>
               <h1>Dieser Bestätigungslink ist nicht mehr gültig</h1>
@@ -821,7 +726,6 @@ export class AuthController {
                 Bitte fordere einen neuen Bestätigungslink an, um deine E-Mail-Adresse zu verifizieren.
               </p>
             </section>
-
 
             <div class="mascot" aria-hidden="true">
               <img
