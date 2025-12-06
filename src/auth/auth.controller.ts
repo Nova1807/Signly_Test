@@ -503,6 +503,7 @@ export class AuthController {
       </body>
       </html>
     `;
+    res.type('html'); // Content-Type explizit setzen[web:95]
     return res.send(html);
   }
 
@@ -722,6 +723,7 @@ export class AuthController {
       </body>
       </html>
     `;
+    res.type('html'); // Antwort als HTML kennzeichnen[web:95]
     return res.status(400).send(html);
   }
 }
