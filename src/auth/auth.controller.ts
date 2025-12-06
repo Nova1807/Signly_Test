@@ -324,6 +324,15 @@ export class AuthController {
             margin: 10px 0 0;
           }
 
+          #confetti-canvas {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 999;
+          }
+
           @media (max-width: 520px) {
             body {
               padding: 16px;
@@ -349,19 +358,33 @@ export class AuthController {
         </style>
       </head>
       <body>
+        <canvas id="confetti-canvas"></canvas>
+
         <main class="card" role="main" aria-label="Bestätigung deiner E-Mail-Adresse">
           <div class="card-inner">
             <header class="card-header">
               <div class="logo">
-                <img src="${assetsBaseUrl}/Logo.png" alt="Signly Logo" />
-                <span class="brand-name">Signly</span>
+                <img
+                  src="${assetsBaseUrl}/Logo.png"
+                  alt="Signly Logo"
+                  width="120"
+                  height="36"
+                  loading="eager"
+                />
+                <span class="brand-name">ignly</span>
               </div>
               <div class="pill">E-Mail bestätigt</div>
             </header>
 
             <section class="hero">
               <div class="hero-illustration" aria-hidden="true">
-                <img src="${assetsBaseUrl}/Maskotchen.png" alt="Signly Maskottchen" />
+                <img
+                  src="${assetsBaseUrl}/Maskotchen.png"
+                  alt="Signly Maskottchen"
+                  width="240"
+                  height="240"
+                  loading="eager"
+                />
               </div>
               <div class="hero-copy">
                 <div class="status-icon" aria-hidden="true"></div>
@@ -373,7 +396,7 @@ export class AuthController {
                   Willkommen bei Signly, ${safeName}!
                 </p>
                 <p class="hint">
-                  Du kannst dieses Fenster jetzt schließen und deine Zugangsdaten sicher aufbewahren.
+                  Du kannst dieses Fenster jetzt schließen, merke dir nur deine Anmeldedaten.
                 </p>
                 <p class="secondary">
                   Wenn du diese Registrierung nicht selbst ausgelöst hast, kannst du diese Nachricht ignorieren.
@@ -382,6 +405,100 @@ export class AuthController {
             </section>
           </div>
         </main>
+
+        <script>
+          (function () {
+            const canvas = document.getElementById('confetti-canvas');
+            if (!canvas || !canvas.getContext) return;
+
+            const ctx = canvas.getContext('2d');
+            let width = window.innerWidth;
+            let height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+
+            window.addEventListener('resize', () => {
+              width = window.innerWidth;
+              height = window.innerHeight;
+              canvas.width = width;
+              canvas.height = height;
+            });
+
+            const colors = ['#a6f9fd', '#3b82c4', '#073b4c', '#facc15'];
+            const confettiCount = 120;
+            const gravity = 0.25;
+            const terminalVelocity = 4;
+            const drag = 0.02;
+
+            const randomRange = (min, max) => Math.random() * (max - min) + min;
+
+            const confetti = [];
+            for (let i = 0; i < confettiCount; i++) {
+              confetti.push({
+                color: colors[Math.floor(Math.random() * colors.length)],
+                dimensions: {
+                  x: randomRange(6, 10),
+                  y: randomRange(8, 14),
+                },
+                position: {
+                  x: Math.random() * width,
+                  y: randomRange(-height, 0),
+                },
+                rotation: randomRange(0, 2 * Math.PI),
+                velocity: {
+                  x: randomRange(-2, 2),
+                  y: randomRange(1, 3),
+                },
+              });
+            }
+
+            const duration = 2500;
+            const startTime = performance.now();
+
+            const render = (time) => {
+              const elapsed = time - startTime;
+              ctx.clearRect(0, 0, width, height);
+
+              confetti.forEach((confetto) => {
+                const { x, y } = confetto.position;
+                const { x: w, y: h } = confetto.dimensions;
+
+                confetto.velocity.x -= confetto.velocity.x * drag;
+                confetto.velocity.y = Math.min(
+                  confetto.velocity.y + gravity,
+                  terminalVelocity
+                );
+
+                confetto.position.x += confetto.velocity.x;
+                confetto.position.y += confetto.velocity.y;
+
+                if (confetto.position.y >= height) confetto.position.y = -10;
+                if (confetto.position.x > width) confetto.position.x = 0;
+                if (confetto.position.x < 0) confetto.position.x = width;
+
+                confetto.rotation += confetto.velocity.x * 0.02;
+
+                ctx.save();
+                ctx.translate(confetto.position.x, confetto.position.y);
+                ctx.rotate(confetto.rotation);
+                ctx.fillStyle = confetto.color;
+                ctx.fillRect(-w / 2, -h / 2, w, h);
+                ctx.restore();
+              });
+
+              if (elapsed < duration) {
+                requestAnimationFrame(render);
+              } else {
+                ctx.clearRect(0, 0, width, height);
+                if (canvas && canvas.parentNode) {
+                  canvas.parentNode.removeChild(canvas);
+                }
+              }
+            };
+
+            requestAnimationFrame(render);
+          })();
+        </script>
       </body>
       </html>
     `;
@@ -572,7 +689,13 @@ export class AuthController {
           <div class="card-inner">
             <header class="card-header">
               <div class="logo">
-                <img src="${assetsBaseUrl}/Logo.png" alt="Signly Logo" />
+                <img
+                  src="${assetsBaseUrl}/Logo.png"
+                  alt="Signly Logo"
+                  width="120"
+                  height="36"
+                  loading="eager"
+                />
                 <span class="brand-name">Signly</span>
               </div>
               <div class="pill">Link abgelaufen</div>
@@ -591,7 +714,13 @@ export class AuthController {
             </section>
 
             <div class="mascot" aria-hidden="true">
-              <img src="${assetsBaseUrl}/Maskotchen.png" alt="Signly Maskottchen" />
+              <img
+                src="${assetsBaseUrl}/Maskotchen.png"
+                alt="Signly Maskottchen"
+                width="180"
+                height="180"
+                loading="eager"
+              />
             </div>
           </div>
         </main>
