@@ -390,7 +390,8 @@ export class AuthService {
       },
     });
 
-    const baseVerifyUrl = `https://signly-test-346744939652.europe-west1.run.app/auth/verify`;
+    const baseVerifyUrl =
+      'https://signly-test-346744939652.europe-west1.run.app/auth/verify';
     const verifyUrl = `${baseVerifyUrl}?token=${encodedToken}${
       encodedName ? `&name=${encodedName}` : ''
     }`;
@@ -413,16 +414,27 @@ export class AuthService {
                 <table width="100%" cellspacing="0" cellpadding="0" 
                        style="max-width:600px; background-color:#ffffff; border-radius:16px; 
                               box-shadow:0 10px 25px rgba(0,0,0,0.06); padding:24px 24px 28px;">
+                  <!-- Logo + Maskottchen nebeneinander -->
                   <tr>
                     <td align="center" style="padding-bottom:16px;">
-                      <img src="${assetsBaseUrl}/Logo.png"
-                           alt="Signly Logo"
-                           width="120"
-                           style="display:block; margin-bottom:8px;" />
-                      <img src="${assetsBaseUrl}/Maskotchen.png"
-                           alt="Signly Maskottchen"
-                           width="80"
-                           style="display:block;" />
+                      <table cellspacing="0" cellpadding="0" style="margin:0 auto;">
+                        <tr>
+                          <td align="right" style="padding-right:8px;">
+                            <img src="${assetsBaseUrl}/Logo.png"
+                                 alt="Signly Logo"
+                                 width="120"
+                                 height="40"
+                                 style="display:block; border:0; outline:none; text-decoration:none;" />
+                          </td>
+                          <td align="left" style="padding-left:8px;">
+                            <img src="${assetsBaseUrl}/Maskotchen.png"
+                                 alt="Signly Maskottchen"
+                                 width="80"
+                                 height="80"
+                                 style="display:block; border:0; outline:none; text-decoration:none;" />
+                          </td>
+                        </tr>
+                      </table>
                     </td>
                   </tr>
 
