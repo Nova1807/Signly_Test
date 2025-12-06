@@ -421,7 +421,7 @@ export class AuthService {
                         style="padding-bottom:12px; font-family:Arial, sans-serif;">
                       <img src="${assetsBaseUrl}/Logo.png"
                            alt="Signly Logo"
-                           style="display:block; max-width:120px; height:auto; border:0; outline:none; text-decoration:none;" />
+                           style="display:block; max-width:80px; height:auto; border:0; outline:none; text-decoration:none;" />
                     </td>
                   </tr>
 
@@ -430,7 +430,7 @@ export class AuthService {
                     <td align="center" style="padding-bottom:16px;">
                       <img src="${assetsBaseUrl}/Maskotchen.png"
                            alt="Signly Maskottchen"
-                           style="display:block; max-width:180px; height:auto; border:0; outline:none; text-decoration:none;" />
+                           style="display:block; max-width:260px; height:auto; border:0; outline:none; text-decoration:none;" />
                     </td>
                   </tr>
 
