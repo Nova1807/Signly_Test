@@ -457,10 +457,19 @@ export class AuthService {
                   <tr>
                     <td align="center" style="padding:20px 16px 4px;">
                       <a href="${verifyUrl}"
-                         style="display:inline-block; background:linear-gradient(90deg,#73c5f5,#a6f9fd);
-                                color:#0b2135; font-family:Arial, sans-serif; font-size:15px; 
-                                font-weight:bold; text-decoration:none; padding:12px 28px; 
-                                border-radius:999px;">
+                         style="
+                           display:inline-block;
+                           background-color:#73c5f5;
+                           color:#0b2135;
+                           font-family:Arial, sans-serif;
+                           font-size:15px;
+                           font-weight:bold;
+                           text-decoration:none;
+                           padding:12px 28px;
+                           border-radius:999px;
+                           border:1px solid #3b82c4;
+                           box-shadow:0 4px 10px rgba(59,130,196,0.35);
+                         ">
                         E-Mail-Adresse bestätigen
                       </a>
                     </td>
