@@ -147,12 +147,15 @@ export class AuthController {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
 
+    const baseUrl = 'https://signly-test-346744939652.europe-west1.run.app';
+    const assetsBaseUrl = `${baseUrl}/email-assets`;
+
     const html = `
       <!DOCTYPE html>
       <html lang="de">
       <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>E-Mail verifiziert - Signly</title>
         <style>
           :root {
@@ -170,81 +173,215 @@ export class AuthController {
           }
 
           body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            padding: 40px 16px;
-            background-color: var(--bg-page);
             margin: 0;
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+            background: radial-gradient(circle at top left, #e0f7ff 0, #f4fbff 45%, #ffffff 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
           }
 
-          .container {
-            max-width: 480px;
-            margin: 0 auto;
+          .card {
+            width: 100%;
+            max-width: 520px;
             background: var(--bg-card);
-            padding: 32px 24px 28px;
-            border-radius: 16px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.06);
+            border-radius: 20px;
+            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+            padding: 28px 24px 24px;
+            position: relative;
+            overflow: hidden;
           }
 
-          .icon {
-            font-size: 52px;
-            margin-bottom: 16px;
+          .card::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at top right, rgba(166,249,253,0.55), transparent 60%);
+            opacity: 0.85;
+            pointer-events: none;
+          }
+
+          .card-inner {
+            position: relative;
+            z-index: 1;
+          }
+
+          .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 12px;
+          }
+
+          .logo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          }
+
+          .logo img {
+            display: block;
+            height: 36px;
+            width: auto;
+          }
+
+          .brand-name {
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            font-size: 14px;
+            text-transform: uppercase;
+            color: var(--primary);
+          }
+
+          .pill {
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            border: 1px solid rgba(15,23,42,0.08);
+            background: rgba(255,255,255,0.8);
+            color: var(--text-muted);
+          }
+
+          .hero {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 16px;
+            margin-top: 8px;
+          }
+
+          .hero-illustration {
+            flex: 0 0 160px;
+          }
+
+          .hero-illustration img {
+            width: 100%;
+            max-width: 160px;
+            display: block;
+          }
+
+          .hero-copy {
+            flex: 1;
+            text-align: left;
+          }
+
+          .status-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 999px;
+            background: rgba(166,249,253,0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 8px;
+            border: 1px solid var(--accent-border);
+          }
+
+          .status-icon::before {
+            content: "";
+            display: block;
+            width: 18px;
+            height: 18px;
+            border-radius: 999px;
+            border: 2px solid var(--primary);
+            border-top-color: transparent;
+            border-left-color: transparent;
+            transform: rotate(40deg);
+            box-shadow: 0 0 0 2px rgba(255,255,255,0.9);
           }
 
           h1 {
+            margin: 0 0 6px;
+            font-size: 22px;
             color: var(--primary);
-            margin: 0 0 8px;
-            font-size: 24px;
           }
 
           .subtitle {
-            color: var(--text-muted);
+            margin: 0 0 10px;
             font-size: 14px;
-            margin: 0 0 20px;
+            color: var(--text-muted);
           }
 
           .username {
+            margin: 4px 0 16px;
+            font-size: 16px;
+            font-weight: 600;
             color: var(--text-main);
-            font-size: 18px;
-            font-weight: bold;
-            margin: 8px 0 20px;
           }
 
           .hint {
-            color: var(--text-muted);
             font-size: 13px;
+            color: var(--text-muted);
             margin: 0 0 4px;
           }
 
           .secondary {
-            color: #a0aec0;
-            font-size: 12px;
-            margin: 12px 0 0;
+            font-size: 11px;
+            color: #9ca3af;
+            margin: 10px 0 0;
           }
 
-          @media (min-width: 600px) {
+          @media (max-width: 520px) {
             body {
-              padding: 60px 16px;
+              padding: 16px;
             }
-            .container {
-              padding: 40px 32px 32px;
+
+            .card {
+              padding: 22px 18px 18px;
+            }
+
+            .hero {
+              flex-direction: column;
+              text-align: center;
+            }
+
+            .hero-copy {
+              text-align: center;
+            }
+
+            .card-header {
+              flex-direction: row;
             }
           }
         </style>
       </head>
       <body>
-        <div class="container">
-          <div class="icon">✅</div>
-          <h1>E-Mail erfolgreich verifiziert</h1>
-          <p class="subtitle">Dein Signly-Account wurde erstellt.</p>
-          <div class="username">Willkommen bei Signly, ${safeName}!</div>
-          <p class="hint">
-            Du kannst dieses Fenster jetzt schließen und deine Zugangsdaten sicher aufbewahren.
-          </p>
-          <p class="secondary">
-            Wenn du diese Registrierung nicht selbst ausgelöst hast, kannst du diese Nachricht ignorieren.
-          </p>
-        </div>
+        <main class="card" role="main" aria-label="Bestätigung deiner E-Mail-Adresse">
+          <div class="card-inner">
+            <header class="card-header">
+              <div class="logo">
+                <img src="${assetsBaseUrl}/Logo.png" alt="Signly Logo" />
+                <span class="brand-name">Signly</span>
+              </div>
+              <div class="pill">E-Mail bestätigt</div>
+            </header>
+
+            <section class="hero">
+              <div class="hero-illustration" aria-hidden="true">
+                <img src="${assetsBaseUrl}/Maskotchen.png" alt="Signly Maskottchen" />
+              </div>
+              <div class="hero-copy">
+                <div class="status-icon" aria-hidden="true"></div>
+                <h1>E-Mail erfolgreich verifiziert</h1>
+                <p class="subtitle">
+                  Deine E-Mail-Adresse wurde bestätigt und dein Signly-Account ist jetzt erstellt.
+                </p>
+                <p class="username">
+                  Willkommen bei Signly, ${safeName}!
+                </p>
+                <p class="hint">
+                  Du kannst dieses Fenster jetzt schließen und deine Zugangsdaten sicher aufbewahren.
+                </p>
+                <p class="secondary">
+                  Wenn du diese Registrierung nicht selbst ausgelöst hast, kannst du diese Nachricht ignorieren.
+                </p>
+              </div>
+            </section>
+          </div>
+        </main>
       </body>
       </html>
     `;
@@ -252,12 +389,15 @@ export class AuthController {
   }
 
   private renderExpiredPage(res: Response) {
+    const baseUrl = 'https://signly-test-346744939652.europe-west1.run.app';
+    const assetsBaseUrl = `${baseUrl}/email-assets`;
+
     const html = `
       <!DOCTYPE html>
       <html lang="de">
       <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Link abgelaufen - Signly</title>
         <style>
           :root {
@@ -273,68 +413,188 @@ export class AuthController {
           }
 
           body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            padding: 40px 16px;
-            background-color: var(--bg-page);
             margin: 0;
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+            background: radial-gradient(circle at top left, #ffe2e2 0, #fff5f5 45%, #ffffff 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
           }
 
-          .container {
+          .card {
+            width: 100%;
             max-width: 480px;
-            margin: 0 auto;
             background: var(--bg-card);
-            padding: 32px 24px 28px;
-            border-radius: 16px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.06);
+            border-radius: 20px;
+            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+            padding: 26px 22px 22px;
+            position: relative;
+            overflow: hidden;
           }
 
-          .error-icon {
-            font-size: 52px;
-            color: var(--danger);
-            margin-bottom: 16px;
+          .card::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at top right, rgba(239,68,68,0.12), transparent 60%);
+            pointer-events: none;
+          }
+
+          .card-inner {
+            position: relative;
+            z-index: 1;
+          }
+
+          .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 10px;
+          }
+
+          .logo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          }
+
+          .logo img {
+            display: block;
+            height: 32px;
+            width: auto;
+          }
+
+          .brand-name {
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            font-size: 13px;
+            text-transform: uppercase;
+            color: var(--text-main);
+          }
+
+          .pill {
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            border: 1px solid rgba(248,113,113,0.5);
+            background: rgba(254,242,242,0.9);
+            color: #b91c1c;
+          }
+
+          .hero {
+            margin-top: 8px;
+            text-align: left;
+          }
+
+          .status-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 999px;
+            background: #fee2e2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 10px;
+            border: 1px solid rgba(248,113,113,0.7);
+            position: relative;
+          }
+
+          .status-icon::before,
+          .status-icon::after {
+            content: "";
+            position: absolute;
+            width: 14px;
+            height: 2px;
+            background: var(--danger);
+            border-radius: 999px;
+          }
+
+          .status-icon::before {
+            transform: rotate(45deg);
+          }
+
+          .status-icon::after {
+            transform: rotate(-45deg);
           }
 
           h1 {
-            color: var(--text-main);
             margin: 0 0 8px;
-            font-size: 24px;
+            font-size: 22px;
+            color: var(--text-main);
           }
 
           .subtitle {
             color: var(--text-muted);
             font-size: 14px;
-            margin: 0 16px 16px;
+            margin: 0 0 10px;
           }
 
           .hint {
-            color: #a0aec0;
+            color: #9ca3af;
             font-size: 12px;
             margin: 0;
           }
 
-          @media (min-width: 600px) {
+          .mascot {
+            margin-top: 18px;
+            text-align: right;
+          }
+
+          .mascot img {
+            height: 72px;
+            width: auto;
+          }
+
+          @media (max-width: 520px) {
             body {
-              padding: 60px 16px;
+              padding: 16px;
             }
-            .container {
-              padding: 40px 32px 32px;
+
+            .card {
+              padding: 22px 18px 18px;
+            }
+
+            .hero {
+              text-align: left;
+            }
+
+            .mascot {
+              text-align: center;
             }
           }
         </style>
       </head>
       <body>
-        <div class="container">
-          <div class="error-icon">⚠️</div>
-          <h1>Link ist nicht mehr gültig</h1>
-          <p class="subtitle">
-            Der Bestätigungslink ist abgelaufen oder ungültig.<br/>
-            Bitte fordere einen neuen Bestätigungslink an, um deine E-Mail-Adresse zu verifizieren.
-          </p>
-          <p class="hint">
-            Wenn du diese Anfrage nicht kennst, kannst du diese Nachricht ignorieren.
-          </p>
-        </div>
+        <main class="card" role="main" aria-label="Hinweis: Bestätigungslink abgelaufen">
+          <div class="card-inner">
+            <header class="card-header">
+              <div class="logo">
+                <img src="${assetsBaseUrl}/Logo.png" alt="Signly Logo" />
+                <span class="brand-name">Signly</span>
+              </div>
+              <div class="pill">Link abgelaufen</div>
+            </header>
+
+            <section class="hero">
+              <div class="status-icon" aria-hidden="true"></div>
+              <h1>Dieser Bestätigungslink ist nicht mehr gültig</h1>
+              <p class="subtitle">
+                Der Link ist abgelaufen oder wurde bereits verwendet.
+                Bitte fordere einen neuen Bestätigungslink an, um deine E-Mail-Adresse zu verifizieren.
+              </p>
+              <p class="hint">
+                Wenn du diese Anfrage nicht kennst, kannst du diese Nachricht einfach ignorieren.
+              </p>
+            </section>
+
+            <div class="mascot" aria-hidden="true">
+              <img src="${assetsBaseUrl}/Maskotchen.png" alt="Signly Maskottchen" />
+            </div>
+          </div>
+        </main>
       </body>
       </html>
     `;
