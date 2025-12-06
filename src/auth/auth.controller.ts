@@ -88,7 +88,6 @@ export class AuthController {
     try {
       const firestore = this.firebaseApp.firestore();
 
-      // 1) Token-Dokument holen
       const docRef = firestore.collection('emailVerifications').doc(token);
       const doc = await docRef.get();
 
@@ -103,7 +102,6 @@ export class AuthController {
         return this.renderExpiredPage(res);
       }
 
-      // 2) Ablauf prüfen
       const expiresAt: Date =
         typeof data.expiresAt.toDate === 'function'
           ? data.expiresAt.toDate()
@@ -119,7 +117,6 @@ export class AuthController {
         return this.renderExpiredPage(res);
       }
 
-      // 3) Token ist noch gültig -> User anlegen / verifizieren
       this.logger.log(
         `verify: token still valid, calling authService.verifyEmailToken('${token}')`,
       );
@@ -133,7 +130,6 @@ export class AuthController {
         return this.renderExpiredPage(res);
       }
 
-      // 4) Erfolg: Seite mit Namen aus Query-Param
       const userName = fallbackName;
       this.logger.log(
         `verify: rendering success page with userName='${userName}'`,
@@ -150,58 +146,104 @@ export class AuthController {
       .toString()
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
+
     const html = `
       <!DOCTYPE html>
       <html lang="de">
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Account erstellt - Signly</title>
+        <title>E-Mail verifiziert - Signly</title>
         <style>
+          :root {
+            --bg-page: #f4fbff;
+            --bg-card: #ffffff;
+            --primary: #073b4c;
+            --accent: #a6f9fd;
+            --accent-border: #3b82c4;
+            --text-main: #0b2135;
+            --text-muted: #4a5568;
+          }
+
+          * {
+            box-sizing: border-box;
+          }
+
           body {
             font-family: Arial, sans-serif;
             text-align: center;
-            padding: 50px;
-            background-color: #f5f5f5;
+            padding: 40px 16px;
+            background-color: var(--bg-page);
             margin: 0;
           }
+
           .container {
-            max-width: 600px;
+            max-width: 480px;
             margin: 0 auto;
-            background: white;
-            padding: 40px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            background: var(--bg-card);
+            padding: 32px 24px 28px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.06);
           }
-          .success-icon {
-            font-size: 60px;
-            color: #4CAF50;
-            margin-bottom: 20px;
+
+          .icon {
+            font-size: 52px;
+            margin-bottom: 16px;
           }
+
           h1 {
-            color: #333;
-            margin-bottom: 10px;
-            font-size: 28px;
-          }
-          .username {
-            color: #4CAF50;
+            color: var(--primary);
+            margin: 0 0 8px;
             font-size: 24px;
-            font-weight: bold;
-            margin: 20px 0;
           }
+
           .subtitle {
-            color: #666;
-            font-size: 16px;
-            margin-bottom: 30px;
+            color: var(--text-muted);
+            font-size: 14px;
+            margin: 0 0 20px;
+          }
+
+          .username {
+            color: var(--text-main);
+            font-size: 18px;
+            font-weight: bold;
+            margin: 8px 0 20px;
+          }
+
+          .hint {
+            color: var(--text-muted);
+            font-size: 13px;
+            margin: 0 0 4px;
+          }
+
+          .secondary {
+            color: #a0aec0;
+            font-size: 12px;
+            margin: 12px 0 0;
+          }
+
+          @media (min-width: 600px) {
+            body {
+              padding: 60px 16px;
+            }
+            .container {
+              padding: 40px 32px 32px;
+            }
           }
         </style>
       </head>
       <body>
         <div class="container">
-          <div class="success-icon">✅</div>
-          <h1>Account erfolgreich erstellt</h1>
-          <p class="subtitle">Willkommen bei Signly</p>
-          <div class="username">${safeName}</div>
+          <div class="icon">✅</div>
+          <h1>E-Mail erfolgreich verifiziert</h1>
+          <p class="subtitle">Dein Signly-Account wurde erstellt.</p>
+          <div class="username">Willkommen bei Signly, ${safeName}!</div>
+          <p class="hint">
+            Du kannst dieses Fenster jetzt schließen und deine Zugangsdaten sicher aufbewahren.
+          </p>
+          <p class="secondary">
+            Wenn du diese Registrierung nicht selbst ausgelöst hast, kannst du diese Nachricht ignorieren.
+          </p>
         </div>
       </body>
       </html>
@@ -218,35 +260,66 @@ export class AuthController {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Link abgelaufen - Signly</title>
         <style>
+          :root {
+            --bg-page: #fff5f5;
+            --bg-card: #ffffff;
+            --danger: #e53935;
+            --text-main: #1f2933;
+            --text-muted: #4a5568;
+          }
+
+          * {
+            box-sizing: border-box;
+          }
+
           body {
             font-family: Arial, sans-serif;
             text-align: center;
-            padding: 50px;
-            background-color: #f5f5f5;
+            padding: 40px 16px;
+            background-color: var(--bg-page);
             margin: 0;
           }
+
           .container {
-            max-width: 600px;
+            max-width: 480px;
             margin: 0 auto;
-            background: white;
-            padding: 40px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            background: var(--bg-card);
+            padding: 32px 24px 28px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.06);
           }
+
           .error-icon {
-            font-size: 60px;
-            color: #e53935;
-            margin-bottom: 20px;
+            font-size: 52px;
+            color: var(--danger);
+            margin-bottom: 16px;
           }
+
           h1 {
-            color: #333;
-            margin-bottom: 10px;
-            font-size: 28px;
+            color: var(--text-main);
+            margin: 0 0 8px;
+            font-size: 24px;
           }
+
           .subtitle {
-            color: #666;
-            font-size: 16px;
-            margin-bottom: 30px;
+            color: var(--text-muted);
+            font-size: 14px;
+            margin: 0 16px 16px;
+          }
+
+          .hint {
+            color: #a0aec0;
+            font-size: 12px;
+            margin: 0;
+          }
+
+          @media (min-width: 600px) {
+            body {
+              padding: 60px 16px;
+            }
+            .container {
+              padding: 40px 32px 32px;
+            }
           }
         </style>
       </head>
@@ -256,7 +329,10 @@ export class AuthController {
           <h1>Link ist nicht mehr gültig</h1>
           <p class="subtitle">
             Der Bestätigungslink ist abgelaufen oder ungültig.<br/>
-            Bitte fordere einen neuen Bestätigungslink an.
+            Bitte fordere einen neuen Bestätigungslink an, um deine E-Mail-Adresse zu verifizieren.
+          </p>
+          <p class="hint">
+            Wenn du diese Anfrage nicht kennst, kannst du diese Nachricht ignorieren.
           </p>
         </div>
       </body>
