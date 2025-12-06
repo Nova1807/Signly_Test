@@ -390,7 +390,8 @@ export class AuthService {
       },
     });
 
-    const baseVerifyUrl = `https://signly-test-346744939652.europe-west1.run.app/auth/verify`;
+    const baseVerifyUrl =
+      'https://signly-test-346744939652.europe-west1.run.app/auth/verify';
     const verifyUrl = `${baseVerifyUrl}?token=${encodedToken}${
       encodedName ? `&name=${encodedName}` : ''
     }`;
@@ -457,7 +458,7 @@ export class AuthService {
                     <td align="center" style="padding:20px 16px 4px;">
                       <a href="${verifyUrl}"
                          style="display:inline-block; background:linear-gradient(90deg,#73c5f5,#a6f9fd);
-                                color:#ffffff; font-family:Arial, sans-serif; font-size:15px; 
+                                color:#0b2135; font-family:Arial, sans-serif; font-size:15px; 
                                 font-weight:bold; text-decoration:none; padding:12px 28px; 
                                 border-radius:999px;">
                         E-Mail-Adresse bestätigen
