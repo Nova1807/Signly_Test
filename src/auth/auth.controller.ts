@@ -370,16 +370,13 @@ export class AuthController {
 
             <section class="hero">
               <div class="hero-illustration" aria-hidden="true">
-                <picture>
-                  <source srcset="${assetsBaseUrl}/Maskotchen.webp" type="image/webp" />
-                  <img
-                    src="${assetsBaseUrl}/Maskotchen.png"
-                    alt="Signly Maskottchen"
-                    width="240"
-                    height="240"
-                    style="max-width: 240px; width: 100%; height: auto; display: block;"
-                  />
-                </picture>
+                <img
+                  src="${assetsBaseUrl}/Maskotchen.png"
+                  alt="Signly Maskottchen"
+                  width="240"
+                  height="240"
+                  style="max-width: 240px; width: 100%; height: auto; display: block;"
+                />
               </div>
               <div class="hero-copy">
                 <div class="status-icon" aria-hidden="true"></div>
@@ -712,16 +709,13 @@ export class AuthController {
             </section>
 
             <div class="mascot" aria-hidden="true">
-              <picture>
-                <source srcset="${assetsBaseUrl}/Maskotchen.webp" type="image/webp" />
-                <img
-                  src="${assetsBaseUrl}/Maskotchen.png"
-                  alt="Signly Maskottchen"
-                  width="160"
-                  height="160"
-                  style="max-height: 72px; height: 72px; width: auto; display: inline-block;"
-                />
-              </picture>
+              <img
+                src="${assetsBaseUrl}/Maskotchen.png"
+                alt="Signly Maskottchen"
+                width="160"
+                height="160"
+                style="max-height: 72px; height: 72px; width: auto; display: inline-block;"
+              />
             </div>
           </div>
         </main>
