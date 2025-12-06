@@ -390,8 +390,7 @@ export class AuthService {
       },
     });
 
-    const baseVerifyUrl =
-      'https://signly-test-346744939652.europe-west1.run.app/auth/verify';
+    const baseVerifyUrl = `https://signly-test-346744939652.europe-west1.run.app/auth/verify`;
     const verifyUrl = `${baseVerifyUrl}?token=${encodedToken}${
       encodedName ? `&name=${encodedName}` : ''
     }`;
@@ -420,7 +419,8 @@ export class AuthService {
                     <td align="left" style="padding-bottom:8px;">
                       <img src="${assetsBaseUrl}/Logo.png"
                            alt="Signly Logo"
-                           style="display:block; max-width:64px; height:auto;" />
+                           width="64"
+                           style="display:block; height:auto;" />
                     </td>
                   </tr>
 
@@ -429,7 +429,8 @@ export class AuthService {
                     <td align="center" style="padding-bottom:16px;">
                       <img src="${assetsBaseUrl}/Maskotchen.png"
                            alt="Signly Maskottchen"
-                           style="display:block; max-width:240px; height:auto;" />
+                           width="240"
+                           style="display:block; height:auto;" />
                     </td>
                   </tr>
 
