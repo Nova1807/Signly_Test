@@ -545,6 +545,13 @@ export class AuthController {
             box-sizing: border-box;
           }
 
+          html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+          }
+
           body {
             margin: 0;
             min-height: 100vh;
@@ -558,11 +565,11 @@ export class AuthController {
 
           .card {
             width: 100%;
-            max-width: 480px;
+            max-width: 520px;
             background: var(--bg-card);
             border-radius: 20px;
             box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
-            padding: 26px 22px 22px;
+            padding: 28px 24px 24px;
             position: relative;
             overflow: hidden;
           }
@@ -572,6 +579,7 @@ export class AuthController {
             position: absolute;
             inset: 0;
             background: radial-gradient(circle at top right, rgba(239,68,68,0.12), transparent 60%);
+            opacity: 0.85;
             pointer-events: none;
           }
 
@@ -585,7 +593,7 @@ export class AuthController {
             align-items: center;
             justify-content: space-between;
             gap: 12px;
-            margin-bottom: 10px;
+            margin-bottom: 12px;
           }
 
           .logo {
@@ -596,14 +604,14 @@ export class AuthController {
 
           .logo img {
             display: block;
-            height: 32px;
+            height: 36px;
             width: auto;
           }
 
           .brand-name {
             font-weight: 700;
             letter-spacing: 0.03em;
-            font-size: 13px;
+            font-size: 14px;
             text-transform: uppercase;
             color: var(--text-main);
             margin-top: 10px;
@@ -619,7 +627,26 @@ export class AuthController {
           }
 
           .hero {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 16px;
             margin-top: 8px;
+          }
+
+          .hero-illustration {
+            flex: 0 0 160px;
+          }
+
+          .hero-illustration img {
+            display: block;
+            max-width: 160px;
+            width: 100%;
+            height: auto;
+          }
+
+          .hero-copy {
+            flex: 1;
             text-align: left;
           }
 
@@ -655,33 +682,21 @@ export class AuthController {
           }
 
           h1 {
-            margin: 0 0 8px;
+            margin: 0 0 6px;
             font-size: 22px;
             color: var(--text-main);
           }
 
           .subtitle {
-            color: var(--text-muted);
-            font-size: 14px;
             margin: 0 0 10px;
+            font-size: 14px;
+            color: var(--text-muted);
           }
 
           .hint {
             color: #9ca3af;
             font-size: 12px;
             margin: 0;
-          }
-
-          .mascot {
-            margin-top: 18px;
-            text-align: right;
-          }
-
-          .mascot img {
-            display: inline-block;
-            max-height: 72px;
-            height: 72px;
-            width: auto;
           }
 
           @media (max-width: 520px) {
@@ -694,11 +709,16 @@ export class AuthController {
             }
 
             .hero {
-              text-align: left;
+              flex-direction: column;
+              text-align: center;
             }
 
-            .mascot {
+            .hero-copy {
               text-align: center;
+            }
+
+            .card-header {
+              flex-direction: row;
             }
           }
         </style>
@@ -720,21 +740,23 @@ export class AuthController {
             </header>
 
             <section class="hero">
-              <div class="status-icon" aria-hidden="true"></div>
-              <h1>Dieser Bestätigungslink ist nicht mehr gültig</h1>
-              <p class="subtitle">
-                Der Link ist abgelaufen oder wurde bereits verwendet.
-                Bitte fordere einen neuen Bestätigungslink an, um deine E-Mail-Adresse zu verifizieren.
-              </p>
+              <div class="hero-illustration" aria-hidden="true">
+                <img
+                  src="${assetsBaseUrl}/Maskotchen.png"
+                  alt="Signly Maskottchen"
+                  style="max-width: 160px; width: 100%; height: auto; display: block;"
+                  loading="eager"
+                />
+              </div>
+              <div class="hero-copy">
+                <div class="status-icon" aria-hidden="true"></div>
+                <h1>Dieser Bestätigungslink ist nicht mehr gültig</h1>
+                <p class="subtitle">
+                  Der Link ist abgelaufen oder wurde bereits verwendet.
+                  Bitte fordere einen neuen Bestätigungslink an, um deine E-Mail-Adresse zu verifizieren.
+                </p>
+              </div>
             </section>
-
-            <div class="mascot" aria-hidden="true">
-              <img
-                src="${assetsBaseUrl}/Maskotchen.png"
-                alt="Signly Maskottchen"
-                loading="eager"
-              />
-            </div>
           </div>
         </main>
       </body>
