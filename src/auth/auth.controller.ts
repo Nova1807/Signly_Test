@@ -240,7 +240,7 @@ export class AuthController {
             font-size: 14px;
             text-transform: uppercase;
             color: var(--primary);
-            margin-top: 8px;
+            margin-top: 10px;
           }
 
           .pill {
@@ -605,7 +605,7 @@ export class AuthController {
             font-size: 13px;
             text-transform: uppercase;
             color: var(--text-main);
-            margin-top: 8px;
+            margin-top: 10px;
           }
 
           .pill {
