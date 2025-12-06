@@ -414,23 +414,18 @@ export class AuthService {
                 <table width="100%" cellspacing="0" cellpadding="0" 
                        style="max-width:600px; background-color:#ffffff; border-radius:16px; 
                               box-shadow:0 10px 25px rgba(0,0,0,0.06); padding:24px 24px 28px;">
-                  
-                  <!-- Top-Bar mit kleinem Logo links -->
-                  <tr>
-                    <td align="left"
-                        style="padding-bottom:12px; font-family:Arial, sans-serif;">
-                      <img src="${assetsBaseUrl}/Logo.png"
-                           alt="Signly Logo"
-                           style="display:block; max-width:80px; height:auto; border:0; outline:none; text-decoration:none;" />
-                    </td>
-                  </tr>
-
-                  <!-- Großes Maskottchen mittig -->
                   <tr>
                     <td align="center" style="padding-bottom:16px;">
+                      <!-- Logo kleiner -->
+                      <img src="${assetsBaseUrl}/Logo.png"
+                           alt="Signly Logo"
+                           width="80"
+                           style="display:block; margin-bottom:8px;" />
+                      <!-- Maskottchen größer -->
                       <img src="${assetsBaseUrl}/Maskotchen.png"
                            alt="Signly Maskottchen"
-                           style="display:block; max-width:260px; height:auto; border:0; outline:none; text-decoration:none;" />
+                           width="220"
+                           style="display:block;" />
                     </td>
                   </tr>
 
