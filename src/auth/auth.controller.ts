@@ -224,8 +224,6 @@ export class AuthController {
 
           .logo img {
             display: block;
-            height: 36px;
-            width: auto;
           }
 
           .brand-name {
@@ -255,13 +253,6 @@ export class AuthController {
 
           .hero-illustration {
             flex: 0 0 160px;
-          }
-
-          .hero-illustration img {
-            display: block;
-            max-width: 160px;
-            width: 100%;
-            height: auto;
           }
 
           .hero-copy {
@@ -359,7 +350,7 @@ export class AuthController {
         </style>
       </head>
       <body>
-        <canvas id="confetti-canvas"></canvas>
+        nvas id="confettii-canvas"></canvas>
 
         <main class="card" role="main" aria-label="Bestätigung deiner E-Mail-Adresse">
           <div class="card-inner">
@@ -368,8 +359,9 @@ export class AuthController {
                 <img
                   src="${assetsBaseUrl}/Logo.png"
                   alt="Signly Logo"
-                  style="height: 36px; width: auto;"
-                  loading="eager"
+                  width="120"
+                  height="36"
+                  style="height: 36px; width: auto; display: block;"
                 />
                 <span class="brand-name">ignly</span>
               </div>
@@ -378,12 +370,16 @@ export class AuthController {
 
             <section class="hero">
               <div class="hero-illustration" aria-hidden="true">
-                <img
-                  src="${assetsBaseUrl}/Maskotchen.png"
-                  alt="Signly Maskottchen"
-                  style="max-width: 240px; width: 100%; height: auto; display: block;"
-                  loading="eager"
-                />
+                <picture>
+                  <source srcset="${assetsBaseUrl}/Maskotchen.webp" type="image/webp" />
+                  <img
+                    src="${assetsBaseUrl}/Maskotchen.png"
+                    alt="Signly Maskottchen"
+                    width="240"
+                    height="240"
+                    style="max-width: 240px; width: 100%; height: auto; display: block;"
+                  />
+                </picture>
               </div>
               <div class="hero-copy">
                 <div class="status-icon" aria-hidden="true"></div>
@@ -588,8 +584,6 @@ export class AuthController {
 
           .logo img {
             display: block;
-            height: 32px;
-            width: auto;
           }
 
           .brand-name {
@@ -670,9 +664,6 @@ export class AuthController {
 
           .mascot img {
             display: inline-block;
-            max-height: 72px;
-            height: 72px;
-            width: auto;
           }
 
           @media (max-width: 520px) {
@@ -702,8 +693,9 @@ export class AuthController {
                 <img
                   src="${assetsBaseUrl}/Logo.png"
                   alt="Signly Logo"
-                  style="height: 36px; width: auto;"
-                  loading="eager"
+                  width="120"
+                  height="36"
+                  style="height: 36px; width: auto; display: block;"
                 />
                 <span class="brand-name">Signly</span>
               </div>
@@ -720,11 +712,16 @@ export class AuthController {
             </section>
 
             <div class="mascot" aria-hidden="true">
-              <img
-                src="${assetsBaseUrl}/Maskotchen.png"
-                alt="Signly Maskottchen"
-                loading="eager"
-              />
+              <picture>
+                <source srcset="${assetsBaseUrl}/Maskotchen.webp" type="image/webp" />
+                <img
+                  src="${assetsBaseUrl}/Maskotchen.png"
+                  alt="Signly Maskottchen"
+                  width="160"
+                  height="160"
+                  style="max-height: 72px; height: 72px; width: auto; display: inline-block;"
+                />
+              </picture>
             </div>
           </div>
         </main>
