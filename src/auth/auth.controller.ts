@@ -7,13 +7,16 @@ import {
   Query,
   Res,
   Inject,
+  UseGuards,
+  Req,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
-import type { Response } from 'express';
+import type { Response, Request } from 'express';
 import * as admin from 'firebase-admin';
+import { GoogleAuthGuard } from './guards/google-auth.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -22,7 +25,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     @Inject('FIREBASE_APP') private firebaseApp: admin.app.App,
-  ) { }
+  ) {}
 
   @Post('signup')
   async signUp(@Body() signupData: SignupDto) {
@@ -139,6 +142,33 @@ export class AuthController {
       this.logger.error(`verify ERROR: ${err?.message}`, err?.stack);
       return this.renderExpiredPage(res);
     }
+  }
+
+  // NEU: Google OAuth Start
+  @Get('google')
+  @UseGuards(GoogleAuthGuard)
+  async googleAuth() {
+    this.logger.log('googleAuth endpoint called');
+    // Redirect zu Google macht der Guard/Passport
+    return;
+  }
+
+  // NEU: Google OAuth Redirect
+  @Get('google/redirect')
+  @UseGuards(GoogleAuthGuard)
+  async googleAuthRedirect(@Req() req: Request) {
+    this.logger.log(
+      `googleAuthRedirect called, user=${JSON.stringify(req.user)}`,
+    );
+
+    const googleUser = req.user as {
+      email: string;
+      name: string;
+      googleId: string;
+    };
+
+    const tokens = await this.authService.loginWithGoogle(googleUser);
+    return tokens;
   }
 
   private renderSuccessPage(res: Response, name: string) {
@@ -296,7 +326,6 @@ export class AuthController {
             border-bottom: 3px solid #3b82c4;
             transform: rotate(45deg) translateY(-1px);
           }
-
 
           h1 {
             margin: 0 0 6px;

@@ -367,6 +367,89 @@ export class AuthService {
     }
   }
 
+  // NEU: Google-Login
+  async loginWithGoogle(googleUser: {
+    email: string;
+    name: string;
+    googleId: string;
+  }) {
+    this.logger.log(
+      `loginWithGoogle start: email=${googleUser.email}, googleId=${googleUser.googleId}`,
+    );
+
+    if (!googleUser.email) {
+      this.logger.warn('loginWithGoogle: missing email from Google profile');
+      throw new BadRequestException('Google account has no email');
+    }
+
+    const firestore = this.firebaseApp.firestore();
+    this.logger.log('loginWithGoogle: got firestore instance');
+
+    // 1. Nutzer per googleId suchen
+    const googleIdQuery = await firestore
+      .collection('users')
+      .where('googleId', '==', googleUser.googleId)
+      .get();
+
+    let userId: string | null = null;
+
+    if (!googleIdQuery.empty) {
+      const userDoc = googleIdQuery.docs[0];
+      userId = userDoc.id;
+      this.logger.log(
+        `loginWithGoogle: found user by googleId=${googleUser.googleId}, userId=${userId}`,
+      );
+    } else {
+      // 2. Nutzer per email suchen
+      const emailQuery = await firestore
+        .collection('users')
+        .where('email', '==', googleUser.email)
+        .get();
+
+      if (!emailQuery.empty) {
+        const userDoc = emailQuery.docs[0];
+        userId = userDoc.id;
+        this.logger.log(
+          `loginWithGoogle: found existing user by email=${googleUser.email}, userId=${userId}`,
+        );
+
+        await userDoc.ref.update({
+          googleId: googleUser.googleId,
+          lastLogin: admin.firestore.Timestamp.fromDate(new Date()),
+        });
+      } else {
+        // 3. Neuen Nutzer anlegen
+        this.logger.log(
+          `loginWithGoogle: creating new user for email=${googleUser.email}`,
+        );
+
+        const newUserRef = await firestore.collection('users').add({
+          email: googleUser.email,
+          name: googleUser.name || googleUser.email,
+          googleId: googleUser.googleId,
+          emailVerified: true,
+          password: null,
+          createdAt: admin.firestore.Timestamp.fromDate(new Date()),
+          lastLogin: admin.firestore.Timestamp.fromDate(new Date()),
+        });
+
+        userId = newUserRef.id;
+        this.logger.log(
+          `loginWithGoogle: new user created with ID=${userId}`,
+        );
+      }
+    }
+
+    if (!userId) {
+      this.logger.error('loginWithGoogle: failed to resolve userId');
+      throw new UnauthorizedException();
+    }
+
+    const tokens = await this.generateUserToken(userId);
+    this.logger.log('loginWithGoogle: tokens generated');
+    return tokens;
+  }
+
   private async sendVerificationEmail(
     email: string,
     token: string,
