@@ -22,7 +22,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     @Inject('FIREBASE_APP') private firebaseApp: admin.app.App,
-  ) {}
+  ) { }
 
   @Post('signup')
   async signUp(@Body() signupData: SignupDto) {
@@ -275,31 +275,28 @@ export class AuthController {
             flex: 1;
             text-align: left;
           }
-
           .status-icon {
             width: 40px;
             height: 40px;
             border-radius: 999px;
-            background: rgba(166,249,253,0.6);
+            background: rgba(166, 249, 253, 0.6);
             display: flex;
             align-items: center;
             justify-content: center;
             margin-bottom: 8px;
-            border: 1px solid var(--accent-border);
+            border: 1px solid #3b82c4;
           }
 
           .status-icon::before {
             content: "";
             display: block;
-            width: 18px;
+            width: 10px;
             height: 18px;
-            border-radius: 999px;
-            border: 2px solid var(--primary);
-            border-top-color: transparent;
-            border-left-color: transparent;
-            transform: rotate(40deg);
-            box-shadow: 0 0 0 2px rgba(255,255,255,0.9);
+            border-right: 3px solid #3b82c4;
+            border-bottom: 3px solid #3b82c4;
+            transform: rotate(45deg) translateY(-1px);
           }
+
 
           h1 {
             margin: 0 0 6px;
@@ -411,7 +408,6 @@ export class AuthController {
 
         <script>
           (function () {
-            // passt jetzt zum Canvas oben
             const canvas = document.getElementById('confetti-canvas');
             if (!canvas || !canvas.getContext) return;
 
