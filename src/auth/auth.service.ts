@@ -107,6 +107,7 @@ export class AuthService {
       await firestore.collection('emailVerifications').doc(token).set({
         email,
         password: hashedPassword,
+        name,
         createdAt: admin.firestore.Timestamp.fromDate(createdAt),
         expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
       });
@@ -298,9 +299,11 @@ export class AuthService {
       const email: string =
         (tokenData.email && String(tokenData.email)) || '';
       const password = tokenData.password;
+      const name: string =
+        (tokenData.name && String(tokenData.name)) || '';
 
       this.logger.log(
-        `verifyEmailToken: tokenData.email='${email}'`,
+        `verifyEmailToken: tokenData.email='${email}', name='${name}'`,
       );
 
       if (!email || !password) {
@@ -337,6 +340,7 @@ export class AuthService {
       const userRef = await firestore.collection('users').add({
         email,
         password,
+        name,
         emailVerified: true,
         createdAt: admin.firestore.Timestamp.fromDate(new Date()),
         lastLogin: null,
