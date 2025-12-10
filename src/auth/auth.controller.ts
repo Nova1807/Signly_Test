@@ -9,6 +9,8 @@ import {
   Inject,
   UseGuards,
   Req,
+  UnauthorizedException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
@@ -153,10 +155,10 @@ export class AuthController {
     return;
   }
 
-  // NEU: Google OAuth Redirect
+  // NEU: Google OAuth Redirect → Deep-Link in die App
   @Get('google/redirect')
   @UseGuards(GoogleAuthGuard)
-  async googleAuthRedirect(@Req() req: Request) {
+  async googleAuthRedirect(@Req() req: Request, @Res() res: Response) {
     this.logger.log(
       `googleAuthRedirect called, user=${JSON.stringify(req.user)}`,
     );
@@ -167,8 +169,167 @@ export class AuthController {
       googleId: string;
     };
 
-    const tokens = await this.authService.loginWithGoogle(googleUser);
-    return tokens;
+    const { accessToken, refreshToken } =
+      await this.authService.loginWithGoogle(googleUser);
+
+    // Deep-Link in deine App – Scheme/Path bei Bedarf anpassen
+    const appRedirectUrl =
+      `signly://auth/google` +
+      `?accessToken=${encodeURIComponent(accessToken)}` +
+      `&refreshToken=${encodeURIComponent(refreshToken)}`;
+
+    this.logger.log(`googleAuthRedirect redirecting to ${appRedirectUrl}`);
+    return res.redirect(appRedirectUrl);
+  }
+
+  // Neu: zentraler, geschützter GLB-Download-Endpunkt
+  @Get('glb')
+  async getGlb(
+    @Query('file') file: string,
+    @Query('accessToken') accessTokenQuery: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    this.logger.log(
+      `glb download requested file=${file}, tokenProvided=${
+        accessTokenQuery ? '[q]' : '[no-q]'
+      }`,
+    );
+
+    // Basic validation
+    if (
+      !file ||
+      typeof file !== 'string' ||
+      !file.toLowerCase().endsWith('.glb')
+    ) {
+      this.logger.warn('getGlb: invalid or missing file param');
+      return res.status(400).json({ error: 'Invalid file parameter' });
+    }
+
+    // extract token from query or Authorization header
+    const authHeader =
+      (req.headers && (req.headers['authorization'] as string)) || '';
+    const bearerToken =
+      authHeader?.replace(/^Bearer\s+/i, '') || undefined;
+    const accessToken =
+      (accessTokenQuery && accessTokenQuery.trim()) ||
+      (bearerToken && bearerToken.trim());
+
+    if (!accessToken) {
+      this.logger.warn('getGlb: missing access token');
+      return res.status(401).json({ error: 'Missing access token' });
+    }
+
+    try {
+      const tokenData = await this.validateGlbToken(accessToken, file);
+      // tokenData kann zusätzliche Metadaten enthalten; hier nicht weiter verwendet
+
+      const safeFile = this.sanitizeFilePath(file);
+      await this.streamGlbFromStorage(safeFile, res);
+      return;
+    } catch (err: any) {
+      // specific errors already logged/translated inside helper methods
+      this.logger.error(`getGlb ERROR: ${err?.message}`);
+      if (err instanceof UnauthorizedException)
+        return res.status(401).json({ error: err.message });
+      if (err instanceof ForbiddenException)
+        return res.status(403).json({ error: err.message });
+      // default
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  // Validiert Token-Dokument in Firestore
+  private async validateGlbToken(
+    accessToken: string,
+    requestedFile?: string,
+  ) {
+    const firestore = this.firebaseApp.firestore();
+    const tokenDocRef =
+      firestore.collection('glbAccessTokens').doc(accessToken);
+    const tokenDoc = await tokenDocRef.get();
+
+    if (!tokenDoc.exists) {
+      this.logger.warn('validateGlbToken: access token not found');
+      throw new UnauthorizedException('Invalid access token');
+    }
+
+    const tokenData = tokenDoc.data() as any;
+    if (!tokenData) {
+      this.logger.warn('validateGlbToken: token doc empty');
+      throw new UnauthorizedException('Invalid access token');
+    }
+
+    if (tokenData.expiresAt) {
+      const expiresAt: Date =
+        typeof tokenData.expiresAt.toDate === 'function'
+          ? tokenData.expiresAt.toDate()
+          : new Date(tokenData.expiresAt);
+
+      if (expiresAt.getTime() < Date.now()) {
+        this.logger.log('validateGlbToken: token expired');
+        throw new UnauthorizedException('Access token expired');
+      }
+    }
+
+    if (
+      tokenData.allowedFiles &&
+      Array.isArray(tokenData.allowedFiles) &&
+      requestedFile
+    ) {
+      // falls nur bestimmte Dateien erlaubt sind
+      if (!tokenData.allowedFiles.includes(requestedFile)) {
+        this.logger.warn(
+          'validateGlbToken: token not allowed for requested file',
+        );
+        throw new ForbiddenException('Token not allowed for this file');
+      }
+    }
+
+    return tokenData;
+  }
+
+  // Sanitize: entferne führende Slashes und Pfad-Traversal
+  private sanitizeFilePath(file: string) {
+    return file.replace(/^\/+/, '').replace(/\.\./g, '');
+  }
+
+  // Streamt die Datei sicher aus Firebase Storage in die Response
+  private async streamGlbFromStorage(safeFile: string, res: Response) {
+    const bucket = this.firebaseApp.storage().bucket();
+    const remoteFile = bucket.file(safeFile);
+
+    const [exists] = await remoteFile.exists();
+    if (!exists) {
+      this.logger.warn(
+        `streamGlbFromStorage: file not found ${safeFile}`,
+      );
+      res.status(404).json({ error: 'File not found' });
+      return;
+    }
+
+    res.setHeader('Content-Type', 'model/gltf-binary');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${safeFile.split('/').pop()}"`,
+    );
+
+    const stream = remoteFile.createReadStream();
+    stream.on('error', (err) => {
+      this.logger.error(
+        `streamGlbFromStorage stream error: ${err?.message}`,
+        err?.stack,
+      );
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Error streaming file' });
+      } else {
+        try {
+          res.end();
+        } catch (_) {}
+      }
+    });
+
+    stream.pipe(res);
   }
 
   private renderSuccessPage(res: Response, name: string) {
@@ -238,124 +399,6 @@ export class AuthController {
             opacity: 0.85;
             pointer-events: none;
           }
-
-          .card-inner {
-            position: relative;
-            z-index: 1;
-          }
-
-          .card-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            margin-bottom: 12px;
-          }
-
-          .logo {
-            display: flex;
-            align-items: center;
-            gap: 2px;
-          }
-
-          .logo img {
-            display: block;
-            height: 36px;
-            width: auto;
-          }
-
-          .brand-name {
-            font-weight: 700;
-            letter-spacing: 0.03em;
-            font-size: 14px;
-            text-transform: uppercase;
-            color: var(--primary);
-            margin-top: 10px;
-          }
-
-          .pill {
-            font-size: 11px;
-            padding: 4px 10px;
-            border-radius: 999px;
-            border: 1px solid rgba(15,23,42,0.08);
-            background: rgba(255,255,255,0.8);
-            color: var(--text-muted);
-          }
-
-          .hero {
-            display: flex;
-            flex-direction: row;
-            align-items: center;
-            gap: 16px;
-            margin-top: 8px;
-          }
-
-          .hero-illustration {
-            flex: 0 0 160px;
-          }
-
-          .hero-illustration img {
-            display: block;
-            max-width: 160px;
-            width: 100%;
-            height: auto;
-          }
-
-          .hero-copy {
-            flex: 1;
-            text-align: left;
-          }
-          .status-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: 999px;
-            background: rgba(166, 249, 253, 0.6);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 8px;
-            border: 1px solid #3b82c4;
-          }
-
-          .status-icon::before {
-            content: "";
-            display: block;
-            width: 10px;
-            height: 18px;
-            border-right: 3px solid #3b82c4;
-            border-bottom: 3px solid #3b82c4;
-            transform: rotate(45deg) translateY(-1px);
-          }
-
-          h1 {
-            margin: 0 0 6px;
-            font-size: 22px;
-            color: var(--primary);
-          }
-
-          .subtitle {
-            margin: 0 0 10px;
-            font-size: 14px;
-            color: var(--text-muted);
-          }
-
-          .username {
-            margin: 4px 0 16px;
-            font-size: 16px;
-            font-weight: 600;
-            color: var(--text-main);
-          }
-
-          .hint {
-            font-size: 13px;
-            color: var(--text-muted);
-            margin: 0 0 4px;
-          }
-
-          .secondary {
-            font-size: 11px;
-            color: #9ca3af;
-            margin: 10px 0 0;
           }
 
           #confetti-canvas {
