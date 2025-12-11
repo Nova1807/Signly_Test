@@ -399,7 +399,7 @@ export class AuthController {
             opacity: 0.85;
             pointer-events: none;
           }
-          }
+          
 
           #confetti-canvas {
             position: fixed;
