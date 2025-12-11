@@ -10,6 +10,8 @@ import { FirebaseModule } from '../firebase/firebase.module';
 import { EmailAssetsController } from './email-assets.controller';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
+import { GlbService } from './glb.service';
+import { MailerService } from './mailer.service';
 
 @Module({
   imports: [
@@ -21,6 +23,6 @@ import { GoogleAuthGuard } from './guards/google-auth.guard';
     }),
   ],
   controllers: [AuthController, EmailAssetsController],
-  providers: [AuthService, GoogleStrategy, GoogleAuthGuard],
+  providers: [AuthService, GoogleStrategy, GoogleAuthGuard, GlbService, MailerService],
 })
 export class AuthModule {}
