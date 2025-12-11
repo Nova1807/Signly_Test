@@ -82,8 +82,10 @@ export class AuthController {
       `VERIFY ENDPOINT CALLED with token: ${token}, nameQuery: ${nameQuery}`,
     );
 
-    const decodedName = nameQuery ? decodeURIComponent(nameQuery).trim() : '';
-    const fallbackName = decodedName || 'Nutzer';
+  // Do NOT trust or use name supplied in the query string. The verification
+  // link must never carry user-identifying information. We will read the
+  // confirmed name from the server-side verification result instead.
+  const fallbackName = 'Nutzer';
 
     if (!token || token.trim() === '') {
       this.logger.warn('verify: empty token provided');
@@ -135,7 +137,9 @@ export class AuthController {
         return this.renderExpiredPage(res);
       }
 
-      const userName = fallbackName;
+      // Prefer the server-side canonical name returned by the service. If
+      // it's missing for any reason, fall back to a neutral placeholder.
+      const userName = (result.name && result.name.trim()) || fallbackName;
       this.logger.log(
         `verify: rendering success page with userName='${userName}'`,
       );
@@ -518,7 +522,7 @@ export class AuthController {
             color: #9ca3af;
             margin: 10px 0 0;
           }
-            
+
           #confetti-canvas {
             position: fixed;
             inset: 0;

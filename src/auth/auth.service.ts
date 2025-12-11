@@ -266,14 +266,15 @@ export class AuthService {
     message: string;
     userId?: string;
     email?: string;
+    name?: string;
   }> {
     this.logger.log(`verifyEmailToken START: token='${token}'`);
 
     const firestore = this.firebaseApp.firestore();
 
     try {
-      const docRef = firestore.collection('emailVerifications').doc(token);
-      const doc = await docRef.get();
+  const docRef = firestore.collection('emailVerifications').doc(token);
+  const doc = await docRef.get();
 
       if (!doc.exists) {
         this.logger.error(`verifyEmailToken: document not found for token`);
@@ -296,11 +297,9 @@ export class AuthService {
         };
       }
 
-      const email: string =
-        (tokenData.email && String(tokenData.email)) || '';
+      const email: string = (tokenData.email && String(tokenData.email)) || '';
       const password = tokenData.password;
-      const name: string =
-        (tokenData.name && String(tokenData.name)) || '';
+      const name: string = (tokenData.name && String(tokenData.name)) || '';
 
       this.logger.log(
         `verifyEmailToken: tokenData.email='${email}', name='${name}'`,
@@ -326,11 +325,24 @@ export class AuthService {
           `verifyEmailToken: user already exists for email: ${email}`,
         );
         const existingUser = userQuery.docs[0];
+        // Delete the token so the verification link becomes single-use.
+        try {
+          await docRef.delete();
+          this.logger.log(
+            `verifyEmailToken: deleted emailVerification token after existing user for email=${email}`,
+          );
+        } catch (delErr) {
+          this.logger.warn(
+            `verifyEmailToken: failed to delete token doc: ${delErr?.message}`,
+          );
+        }
+
         return {
           success: true,
           message: 'Account existiert und ist verifiziert.',
           userId: existingUser.id,
           email,
+          name: existingUser.data()?.name || '',
         };
       }
 
@@ -350,11 +362,24 @@ export class AuthService {
         `verifyEmailToken: user created with ID: ${userRef.id}`,
       );
 
+      // After successful user creation, delete the verification token so it cannot be reused.
+      try {
+        await docRef.delete();
+        this.logger.log(
+          `verifyEmailToken: deleted emailVerification token after creating user id=${userRef.id}`,
+        );
+      } catch (delErr) {
+        this.logger.warn(
+          `verifyEmailToken: failed to delete token doc after creating user: ${delErr?.message}`,
+        );
+      }
+
       return {
         success: true,
         message: 'Email erfolgreich verifiziert',
         userId: userRef.id,
         email,
+        name,
       };
     } catch (err) {
       this.logger.error(`verifyEmailToken ERROR: ${err?.message}`, err?.stack);
@@ -460,10 +485,12 @@ export class AuthService {
     );
 
     const encodedToken = encodeURIComponent(token);
-    const encodedName = encodeURIComponent(name || '');
     this.logger.log(`sendVerificationEmail: raw token=${token}`);
     this.logger.log(`sendVerificationEmail: encoded token=${encodedToken}`);
 
+    // Do NOT include the user's name in the verification URL. We avoid
+    // sending any user-identifying data in the link. The token is a single
+    // secret that maps to the verification data in Firestore.
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
@@ -477,11 +504,8 @@ export class AuthService {
       },
     });
 
-    const baseVerifyUrl =
-      'https://backend.signly.at/auth/verify';
-    const verifyUrl = `${baseVerifyUrl}?token=${encodedToken}${
-      encodedName ? `&name=${encodedName}` : ''
-    }`;
+    const baseVerifyUrl = 'https://backend.signly.at/auth/verify';
+    const verifyUrl = `${baseVerifyUrl}?token=${encodedToken}`;
     this.logger.log(`sendVerificationEmail: verify URL: ${verifyUrl}`);
 
     const baseUrl = 'https://backend.signly.at';
