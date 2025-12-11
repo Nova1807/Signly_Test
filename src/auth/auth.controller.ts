@@ -338,7 +338,7 @@ export class AuthController {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
 
-    const baseUrl = 'https://signly-test-346744939652.europe-west1.run.app';
+    const baseUrl = 'https://backend.signly.at';
     const assetsBaseUrl = `${baseUrl}/email-assets`;
 
     const html = `
@@ -590,7 +590,7 @@ export class AuthController {
   }
 
   private renderExpiredPage(res: Response) {
-    const baseUrl = 'https://signly-test-346744939652.europe-west1.run.app';
+    const baseUrl = 'https://backend.signly.at';
     const assetsBaseUrl = `${baseUrl}/email-assets`;
 
     const html = `

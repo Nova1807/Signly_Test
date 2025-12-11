@@ -12,7 +12,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
       callbackURL:
         process.env.GOOGLE_CALLBACK_URL ??
-        'https://signly-test-346744939652.europe-west1.run.app/auth/google/redirect',
+        'https://backend.signly.at/auth/google/redirect',
       scope: ['email', 'profile'],
     };
 
