@@ -478,13 +478,13 @@ export class AuthService {
     });
 
     const baseVerifyUrl =
-      'https://signly-test-346744939652.europe-west1.run.app/auth/verify';
+      'https://backend.signly.at/auth/verify';
     const verifyUrl = `${baseVerifyUrl}?token=${encodedToken}${
       encodedName ? `&name=${encodedName}` : ''
     }`;
     this.logger.log(`sendVerificationEmail: verify URL: ${verifyUrl}`);
 
-    const baseUrl = 'https://signly-test-346744939652.europe-west1.run.app';
+    const baseUrl = 'https://backend.signly.at';
     const assetsBaseUrl = `${baseUrl}/email-assets`;
 
     const mailOptions = {
