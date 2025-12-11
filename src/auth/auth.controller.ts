@@ -399,8 +399,126 @@ export class AuthController {
             opacity: 0.85;
             pointer-events: none;
           }
-          
 
+          .card-inner {
+            position: relative;
+            z-index: 1;
+          }
+
+          .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 12px;
+          }
+
+          .logo {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+          }
+
+          .logo img {
+            display: block;
+            height: 36px;
+            width: auto;
+          }
+
+          .brand-name {
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            font-size: 14px;
+            text-transform: uppercase;
+            color: var(--primary);
+            margin-top: 10px;
+          }
+
+          .pill {
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            border: 1px solid rgba(15,23,42,0.08);
+            background: rgba(255,255,255,0.8);
+            color: var(--text-muted);
+          }
+
+          .hero {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 16px;
+            margin-top: 8px;
+          }
+
+          .hero-illustration {
+            flex: 0 0 160px;
+          }
+
+          .hero-illustration img {
+            display: block;
+            max-width: 160px;
+            width: 100%;
+            height: auto;
+          }
+
+          .hero-copy {
+            flex: 1;
+            text-align: left;
+          }
+          .status-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 999px;
+            background: rgba(166, 249, 253, 0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 8px;
+            border: 1px solid #3b82c4;
+          }
+
+          .status-icon::before {
+            content: "";
+            display: block;
+            width: 10px;
+            height: 18px;
+            border-right: 3px solid #3b82c4;
+            border-bottom: 3px solid #3b82c4;
+            transform: rotate(45deg) translateY(-1px);
+          }
+
+          h1 {
+            margin: 0 0 6px;
+            font-size: 22px;
+            color: var(--primary);
+          }
+
+          .subtitle {
+            margin: 0 0 10px;
+            font-size: 14px;
+            color: var(--text-muted);
+          }
+
+          .username {
+            margin: 4px 0 16px;
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-main);
+          }
+
+          .hint {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin: 0 0 4px;
+          }
+
+          .secondary {
+            font-size: 11px;
+            color: #9ca3af;
+            margin: 10px 0 0;
+          }
+            
           #confetti-canvas {
             position: fixed;
             inset: 0;
