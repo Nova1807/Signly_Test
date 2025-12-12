@@ -226,7 +226,7 @@ export function renderSuccessPageHtml(name: string) {
             <header class="card-header">
               <div class="logo">
                 <img
-                  src="${assetsBaseUrl}/Logo.png"
+                  src="https://storage.googleapis.com/signlydaten/schlange/Logo.png"
                   alt="Signly Logo"
                   style="height: 36px; width: auto;"
                   loading="eager"
@@ -239,7 +239,7 @@ export function renderSuccessPageHtml(name: string) {
             <section class="hero">
               <div class="hero-illustration" aria-hidden="true">
                 <img
-                  src="${assetsBaseUrl}/Maskotchen.png"
+                  src="https://storage.googleapis.com/signlydaten/schlange/Maskotchen.png"
                   alt="Signly Maskottchen"
                   style="max-width: 160px; width: 100%; height: auto; display: block;"
                   loading="eager"
@@ -580,7 +580,7 @@ export function renderExpiredPageHtml() {
             <header class="card-header">
               <div class="logo">
                 <img
-                  src="${assetsBaseUrl}/Logo.png"
+                  src="https://storage.googleapis.com/signlydaten/schlange/Logo.png
                   alt="Signly Logo"
                   style="height: 36px; width: auto;"
                   loading="eager"
@@ -593,7 +593,7 @@ export function renderExpiredPageHtml() {
             <section class="hero">
               <div class="hero-illustration" aria-hidden="true">
                 <img
-                  src="${assetsBaseUrl}/Maskotchen.png"
+                  src="https://storage.googleapis.com/signlydaten/schlange/SchlangeBoese.png"
                   alt="Signly Maskottchen"
                   style="max-width: 160px; width: 100%; height: auto; display: block;"
                   loading="eager"

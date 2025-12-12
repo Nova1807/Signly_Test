@@ -49,7 +49,7 @@ export class MailerService {
 
                   <tr>
                     <td align="left" style="padding-bottom:8px;">
-                      <img src="${assetsBaseUrl}/Logo.png"
+                      <img src="https://storage.googleapis.com/signlydaten/schlange/Logo.png"
                            alt="Signly Logo"
                            width="64"
                            height="36"
@@ -59,7 +59,7 @@ export class MailerService {
 
                   <tr>
                     <td align="center" style="padding-bottom:16px;">
-                      <img src="${assetsBaseUrl}/Maskotchen.png"
+                      <img src="https://storage.googleapis.com/signlydaten/schlange/Maskotchen.png"
                            alt="Signly Maskotchen"
                            width="240"
                            height="240"
