@@ -580,7 +580,7 @@ export function renderExpiredPageHtml() {
             <header class="card-header">
               <div class="logo">
                 <img
-                  src="https://storage.googleapis.com/signlydaten/schlange/Logo.png
+                  src="https://storage.googleapis.com/signlydaten/schlange/Logo.png"
                   alt="Signly Logo"
                   style="height: 36px; width: auto;"
                   loading="eager"
