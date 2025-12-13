@@ -13,15 +13,19 @@ import { JwtService } from '@nestjs/jwt';
 import { v4 as uuidv4 } from 'uuid';
 import { MailerService } from './mailer.service';
 import words from './words.json';
+import similarity from 'similarity';
 
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
-  // words.json ist ein reines Array von Strings
+  // words.json ist ein Array von Strings (deine Schimpfwörterliste)
   private readonly forbiddenWords: string[] = (words as string[])
     .filter((w) => !!w)
     .map((w) => w.toLowerCase().trim());
+
+  // Threshold für Fuzzy-Matching (0.6 = 60 % Ähnlichkeit)
+  private readonly similarityThreshold = 0.6;
 
   constructor(
     @Inject('FIREBASE_APP') private firebaseApp: admin.app.App,
@@ -32,17 +36,43 @@ export class AuthService {
   private validateNameAgainstForbiddenWords(name: string): void {
     const nameLower = (name || '').toLowerCase();
 
-    const hit = this.forbiddenWords.find((word) => {
+    // 1. Direkter Substring-Treffer
+    const directHit = this.forbiddenWords.find((word) => {
       const w = word.toLowerCase();
       if (!w) return false;
       return nameLower.includes(w);
     });
 
-    if (hit) {
+    if (directHit) {
       this.logger.warn(
-        `signup: forbidden name "${name}" contains "${hit}"`,
+        `signup: forbidden name "${name}" contains "${directHit}" (direct)`,
       );
-      // gleicher Typ wie bei "Benutzername vergeben", andere Nachricht
+      throw new BadRequestException(
+        'Dieser Benutzername ist nicht erlaubt',
+      );
+    }
+
+    // 2. Fuzzy-Ähnlichkeitsprüfung
+    const parts = nameLower.split(/\s+|_|-|\./).filter(Boolean);
+
+    const fuzzyHit = this.forbiddenWords.find((word) => {
+      const w = word.toLowerCase();
+      if (!w) return false;
+
+      const scoreWhole = similarity(nameLower, w);
+      const scoreParts = parts.reduce((max, part) => {
+        const s = similarity(part, w);
+        return s > max ? s : max;
+      }, 0);
+
+      const score = Math.max(scoreWhole, scoreParts);
+      return score >= this.similarityThreshold;
+    });
+
+    if (fuzzyHit) {
+      this.logger.warn(
+        `signup: forbidden name "${name}" similar to "${fuzzyHit}" (fuzzy)`,
+      );
       throw new BadRequestException(
         'Dieser Benutzername ist nicht erlaubt',
       );
@@ -77,7 +107,7 @@ export class AuthService {
       throw new BadRequestException('Name ist erforderlich');
     }
 
-    // NEU: Name gegen Schimpfwörter prüfen
+    // NEU: Name gegen Schimpfwörter (direkt + fuzzy) prüfen
     this.validateNameAgainstForbiddenWords(name);
 
     try {
