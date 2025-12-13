@@ -12,73 +12,45 @@ import { LoginDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
 import { v4 as uuidv4 } from 'uuid';
 import { MailerService } from './mailer.service';
-import * as path from 'path';
-import * as fs from 'fs';
-
+import words from './words.json';
 
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
-  private forbiddenWords: string[] = [];
 
+  // words.json ist ein reines Array von Strings
+  private readonly forbiddenWords: string[] = (words as string[])
+    .filter((w) => !!w)
+    .map((w) => w.toLowerCase().trim());
 
   constructor(
     @Inject('FIREBASE_APP') private firebaseApp: admin.app.App,
     private jwtService: JwtService,
     private mailerService: MailerService,
-  ) {
-    this.loadForbiddenWords();
-  }
-
-
-  private loadForbiddenWords() {
-    try {
-      const wordsPath = path.join(__dirname, 'words.json');
-      const wordsData = fs.readFileSync(wordsPath, 'utf-8');
-      const wordsJson = JSON.parse(wordsData);
-      
-      // Unterstützt sowohl Array als auch Objekt mit "words" property
-      this.forbiddenWords = Array.isArray(wordsJson) 
-        ? wordsJson 
-        : (wordsJson.words || []);
-      
-      // Alle Wörter in Kleinbuchstaben für Case-Insensitive Vergleich
-      this.forbiddenWords = this.forbiddenWords.map(word => 
-        word.toLowerCase().trim()
-      );
-      
-      this.logger.log(
-        `Loaded ${this.forbiddenWords.length} forbidden words from words.json`
-      );
-    } catch (err) {
-      this.logger.error(
-        `Failed to load forbidden words: ${err?.message}`,
-        err?.stack
-      );
-      this.forbiddenWords = [];
-    }
-  }
-
+  ) {}
 
   private validateNameAgainstForbiddenWords(name: string): void {
-    const nameLower = name.toLowerCase();
-    
-    for (const forbiddenWord of this.forbiddenWords) {
-      if (nameLower.includes(forbiddenWord)) {
-        this.logger.warn(
-          `Name validation failed: "${name}" contains forbidden word "${forbiddenWord}"`
-        );
-        throw new BadRequestException(
-          'Dieser Benutzername enthält nicht erlaubte Wörter'
-        );
-      }
+    const nameLower = (name || '').toLowerCase();
+
+    const hit = this.forbiddenWords.find((word) => {
+      const w = word.toLowerCase();
+      if (!w) return false;
+      return nameLower.includes(w);
+    });
+
+    if (hit) {
+      this.logger.warn(
+        `signup: forbidden name "${name}" contains "${hit}"`,
+      );
+      // gleicher Typ wie bei "Benutzername vergeben", andere Nachricht
+      throw new BadRequestException(
+        'Dieser Benutzername ist nicht erlaubt',
+      );
     }
   }
-
 
   async signup(signupData: SignupDto) {
     this.logger.log(`signup start: ${JSON.stringify(signupData)}`);
-
 
     const rawNameFromDto =
       (signupData && (signupData as any).name) ||
@@ -88,9 +60,7 @@ export class AuthService {
     const name =
       (typeof rawNameFromDto === 'string' ? rawNameFromDto.trim() : '').trim();
 
-
     const { email, password } = signupData as any;
-
 
     if (!email || typeof email !== 'string' || !email.trim()) {
       this.logger.warn('signup: missing email');
@@ -107,15 +77,12 @@ export class AuthService {
       throw new BadRequestException('Name ist erforderlich');
     }
 
-
-    // NEUE VALIDIERUNG: Prüfe Namen gegen verbotene Wörter
+    // NEU: Name gegen Schimpfwörter prüfen
     this.validateNameAgainstForbiddenWords(name);
-
 
     try {
       const firestore = this.firebaseApp.firestore();
       this.logger.log('signup: got firestore instance');
-
 
       const emailRef = firestore.collection('users').where('email', '==', email);
       const emailSnapshot = await emailRef.get();
@@ -123,19 +90,16 @@ export class AuthService {
         `signup: existing users with email=${email}: ${emailSnapshot.size}`,
       );
 
-
       if (!emailSnapshot.empty) {
         this.logger.warn(`signup: email already in use: ${email}`);
         throw new BadRequestException('Diese Email hat bereits einen Account');
       }
-
 
       const nameRef = firestore.collection('users').where('name', '==', name);
       const nameSnapshot = await nameRef.get();
       this.logger.log(
         `signup: existing users with name=${name}: ${nameSnapshot.size}`,
       );
-
 
       if (!nameSnapshot.empty) {
         this.logger.warn(`signup: name already in use: ${name}`);
@@ -144,16 +108,13 @@ export class AuthService {
         );
       }
 
-
       const hashedPassword = await bcrypt.hash(password, 10);
       this.logger.log('signup: password hashed');
-
 
       const oldTokensQuery = await firestore
         .collection('emailVerifications')
         .where('email', '==', email)
         .get();
-
 
       if (!oldTokensQuery.empty) {
         this.logger.log(
@@ -165,16 +126,13 @@ export class AuthService {
         await Promise.all(deletePromises);
       }
 
-
       const token = uuidv4();
       const createdAt = new Date();
       const expiresAt = new Date(createdAt.getTime() + 15 * 60 * 1000);
 
-
       this.logger.log(`signup: creating token ${token}`);
       this.logger.log(`signup: token expires at ${expiresAt.toISOString()}`);
       this.logger.log(`signup: server time: ${createdAt.toISOString()}`);
-
 
       await firestore.collection('emailVerifications').doc(token).set({
         email,
@@ -184,15 +142,12 @@ export class AuthService {
         expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
       });
 
-
       this.logger.log(
         'signup: email verification document created with token as document ID',
       );
 
-
       await this.mailerService.sendVerificationEmail(email, token, name);
       this.logger.log('signup: verification email sent');
-
 
       return {
         success: true,
@@ -205,27 +160,21 @@ export class AuthService {
     }
   }
 
-
   async login(credentials: LoginDto) {
     this.logger.log(`login start: ${JSON.stringify(credentials)}`);
 
-
     const { identifier, password } = credentials as any;
-
 
     try {
       const firestore = this.firebaseApp.firestore();
       this.logger.log('login: got firestore instance');
 
-
       const isEmail =
         typeof identifier === 'string' && identifier.includes('@');
-
 
       const userQuery = isEmail
         ? firestore.collection('users').where('email', '==', identifier)
         : firestore.collection('users').where('name', '==', identifier);
-
 
       const snapshot = await userQuery.get();
       this.logger.log(
@@ -233,7 +182,6 @@ export class AuthService {
           isEmail ? 'email' : 'name'
         }=${identifier}: ${snapshot.size}`,
       );
-
 
       if (snapshot.empty) {
         this.logger.warn(
@@ -244,17 +192,14 @@ export class AuthService {
         throw new UnauthorizedException('Wrong credentials');
       }
 
-
       const userDoc = snapshot.docs[0];
       const user = userDoc.data() as any;
       this.logger.log(
         `login: userDoc id=${userDoc.id}, user=${JSON.stringify(user)}`,
       );
 
-
       const passwordMatch = await bcrypt.compare(password, user.password);
       this.logger.log(`login: passwordMatch=${passwordMatch}`);
-
 
       if (!passwordMatch) {
         this.logger.warn(
@@ -265,7 +210,6 @@ export class AuthService {
         throw new UnauthorizedException('Wrong credentials');
       }
 
-
       const tokens = await this.generateUserToken(userDoc.id);
       this.logger.log('login: tokens generated');
       return tokens;
@@ -275,38 +219,31 @@ export class AuthService {
     }
   }
 
-
   async refreshTokens(refreshToken: string) {
     this.logger.log(`refreshTokens start: token=${refreshToken}`);
-
 
     try {
       const firestore = this.firebaseApp.firestore();
       this.logger.log('refreshTokens: got firestore instance');
-
 
       const tokenRef = firestore
         .collection('refreshTokens')
         .where('token', '==', refreshToken)
         .where('expiryDate', '>=', new Date());
 
-
       const snapshot = await tokenRef.get();
       this.logger.log(`refreshTokens: tokens found=${snapshot.size}`);
-
 
       if (snapshot.empty) {
         this.logger.warn('refreshTokens: token not found or expired');
         throw new UnauthorizedException();
       }
 
-
       const tokenDoc = snapshot.docs[0];
       const token = tokenDoc.data() as any;
       this.logger.log(
         `refreshTokens: tokenDoc id=${tokenDoc.id}, userId=${token.userId}`,
       );
-
 
       const tokens = await this.generateUserToken(token.userId);
       this.logger.log('refreshTokens: new tokens generated');
@@ -320,19 +257,15 @@ export class AuthService {
     }
   }
 
-
   async generateUserToken(userId: string) {
     this.logger.log(`generateUserToken start: userId=${userId}`);
-
 
     const accessToken = this.jwtService.sign({ userId }, { expiresIn: '1h' });
     const refreshToken = uuidv4();
     this.logger.log('generateUserToken: tokens created');
 
-
     await this.storeRefreshToken(refreshToken, userId);
     this.logger.log('generateUserToken: refresh token stored');
-
 
     return {
       accessToken,
@@ -340,18 +273,14 @@ export class AuthService {
     };
   }
 
-
   async storeRefreshToken(token: string, userId: string) {
     this.logger.log(`storeRefreshToken start: userId=${userId}`);
-
 
     const expiryDate = new Date();
     expiryDate.setDate(expiryDate.getDate() + 3);
 
-
     const firestore = this.firebaseApp.firestore();
     this.logger.log('storeRefreshToken: got firestore instance');
-
 
     await firestore.collection('refreshTokens').add({
       token,
@@ -360,7 +289,6 @@ export class AuthService {
     });
     this.logger.log('storeRefreshToken: refresh token document created');
   }
-
 
   async verifyEmailToken(token: string): Promise<{
     success: boolean;
@@ -372,14 +300,11 @@ export class AuthService {
   }> {
     this.logger.log(`verifyEmailToken START: token='${token}'`);
 
-
     const firestore = this.firebaseApp.firestore();
-
 
     try {
       const docRef = firestore.collection('emailVerifications').doc(token);
       const doc = await docRef.get();
-
 
       if (!doc.exists) {
         this.logger.error(`verifyEmailToken: document not found for token`);
@@ -390,7 +315,6 @@ export class AuthService {
           email: '',
         };
       }
-
 
       const tokenData = doc.data() as any;
       if (!tokenData) {
@@ -403,16 +327,13 @@ export class AuthService {
         };
       }
 
-
       const email: string = (tokenData.email && String(tokenData.email)) || '';
       const password = tokenData.password;
       const name: string = (tokenData.name && String(tokenData.name)) || '';
 
-
       this.logger.log(
         `verifyEmailToken: tokenData.email='${email}', name='${name}'`,
       );
-
 
       if (!email || !password) {
         this.logger.warn(`verifyEmailToken: missing required fields`);
@@ -424,19 +345,16 @@ export class AuthService {
         };
       }
 
-
       const userQuery = await firestore
         .collection('users')
         .where('email', '==', email)
         .get();
-
 
       if (!userQuery.empty) {
         this.logger.log(
           `verifyEmailToken: user already exists for email: ${email}`,
         );
         const existingUser = userQuery.docs[0];
-        // Delete the token so the verification link becomes single-use.
         try {
           await docRef.delete();
           this.logger.log(
@@ -448,7 +366,6 @@ export class AuthService {
           );
         }
 
-
         return {
           success: true,
           message: 'Account existiert und ist verifiziert.',
@@ -457,7 +374,6 @@ export class AuthService {
           name: existingUser.data()?.name || '',
         };
       }
-
 
       this.logger.log(
         `verifyEmailToken: creating user for email: ${email}`,
@@ -471,13 +387,10 @@ export class AuthService {
         lastLogin: null,
       });
 
-
       this.logger.log(
         `verifyEmailToken: user created with ID: ${userRef.id}`,
       );
 
-
-      // After successful user creation, delete the verification token so it cannot be reused.
       try {
         await docRef.delete();
         this.logger.log(
@@ -488,7 +401,6 @@ export class AuthService {
           `verifyEmailToken: failed to delete token doc after creating user: ${delErr?.message}`,
         );
       }
-
 
       return {
         success: true,
@@ -508,7 +420,6 @@ export class AuthService {
     }
   }
 
-
   // NEU: Google-Login
   async loginWithGoogle(googleUser: {
     email: string;
@@ -519,26 +430,20 @@ export class AuthService {
       `loginWithGoogle start: email=${googleUser.email}, googleId=${googleUser.googleId}`,
     );
 
-
     if (!googleUser.email) {
       this.logger.warn('loginWithGoogle: missing email from Google profile');
       throw new BadRequestException('Google account has no email');
     }
 
-
     const firestore = this.firebaseApp.firestore();
     this.logger.log('loginWithGoogle: got firestore instance');
 
-
-    // 1. Nutzer per googleId suchen
     const googleIdQuery = await firestore
       .collection('users')
       .where('googleId', '==', googleUser.googleId)
       .get();
 
-
     let userId: string | null = null;
-
 
     if (!googleIdQuery.empty) {
       const userDoc = googleIdQuery.docs[0];
@@ -547,12 +452,10 @@ export class AuthService {
         `loginWithGoogle: found user by googleId=${googleUser.googleId}, userId=${userId}`,
       );
     } else {
-      // 2. Nutzer per email suchen
       const emailQuery = await firestore
         .collection('users')
         .where('email', '==', googleUser.email)
         .get();
-
 
       if (!emailQuery.empty) {
         const userDoc = emailQuery.docs[0];
@@ -561,17 +464,14 @@ export class AuthService {
           `loginWithGoogle: found existing user by email=${googleUser.email}, userId=${userId}`,
         );
 
-
         await userDoc.ref.update({
           googleId: googleUser.googleId,
           lastLogin: admin.firestore.Timestamp.fromDate(new Date()),
         });
       } else {
-        // 3. Neuen Nutzer anlegen
         this.logger.log(
           `loginWithGoogle: creating new user for email=${googleUser.email}`,
         );
-
 
         const newUserRef = await firestore.collection('users').add({
           email: googleUser.email,
@@ -583,7 +483,6 @@ export class AuthService {
           lastLogin: admin.firestore.Timestamp.fromDate(new Date()),
         });
 
-
         userId = newUserRef.id;
         this.logger.log(
           `loginWithGoogle: new user created with ID=${userId}`,
@@ -591,17 +490,13 @@ export class AuthService {
       }
     }
 
-
     if (!userId) {
       this.logger.error('loginWithGoogle: failed to resolve userId');
       throw new UnauthorizedException();
     }
 
-
     const tokens = await this.generateUserToken(userId);
     this.logger.log('loginWithGoogle: tokens generated');
     return tokens;
   }
-
-
 }
