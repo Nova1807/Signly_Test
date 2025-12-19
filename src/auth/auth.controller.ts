@@ -197,12 +197,11 @@ export class AuthController {
     return res.redirect(appRedirectUrl);
   }
 
-  // Profil-Update: accessToken + Profil-Daten im Body
+  // Profil-Update: alles im Body (accessToken + name + aboutMe)
   @Post('profile')
-  async updateProfile(
-    @Body('accessToken') accessToken: string,
-    @Body() dto: UpdateProfileDto,
-  ) {
+  async updateProfile(@Body() dto: UpdateProfileDto) {
+    const accessToken = dto.accessToken;
+
     if (!accessToken) {
       this.logger.warn('updateProfile: missing access token in body');
       throw new UnauthorizedException('Missing access token');
@@ -222,13 +221,16 @@ export class AuthController {
       throw new UnauthorizedException('Invalid token payload');
     }
 
+    // accessToken nicht an den Service weiterreichen / nicht speichern
+    const { accessToken: _ignored, ...profileDto } = dto;
+
     this.logger.log(
       `updateProfile endpoint called by userId=${userId} with body=${JSON.stringify(
-        dto,
+        profileDto,
       )}`,
     );
 
-    return this.authService.updateProfile(userId, dto);
+    return this.authService.updateProfile(userId, profileDto);
   }
 
   // zentraler, geschützter GLB-Download-Endpunkt
@@ -274,13 +276,11 @@ export class AuthController {
         accessToken,
         file,
       );
-      // tokenData kann zusätzliche Metadaten enthalten; hier nicht weiter verwendet
 
       const safeFile = this.glbService.sanitizeFilePath(file);
       await this.glbService.streamGlbFromStorage(safeFile, res);
       return;
     } catch (err: any) {
-      // specific errors already logged/translated inside helper methods
       this.logger.error(`getGlb ERROR: ${err?.message}`);
       if (err instanceof UnauthorizedException)
         return res.status(401).json({ error: err.message });
