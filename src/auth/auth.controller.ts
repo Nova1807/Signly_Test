@@ -22,6 +22,7 @@ import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { GlbService } from './glb.service';
 import { renderSuccessPageHtml, renderExpiredPageHtml } from './templates';
 import { UpdateProfileDto } from './update-profile.dto';
+import { JwtService } from '@nestjs/jwt';
 
 @Controller('auth')
 export class AuthController {
@@ -31,6 +32,7 @@ export class AuthController {
     private readonly authService: AuthService,
     @Inject('FIREBASE_APP') private firebaseApp: admin.app.App,
     private readonly glbService: GlbService,
+    private readonly jwtService: JwtService,
   ) {}
 
   @Post('signup')
@@ -193,12 +195,34 @@ export class AuthController {
     return res.redirect(appRedirectUrl);
   }
 
-  // Profil-Update: userId kommt aus Body (damit kein Guard nötig ist)
+  // Profil-Update: Access Token -> userId -> Firestore
   @Post('profile')
   async updateProfile(
-    @Body('userId') userId: string,
+    @Req() req: Request,
     @Body() dto: UpdateProfileDto,
   ) {
+    const authHeader = (req.headers['authorization'] as string) || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+
+    if (!token) {
+      this.logger.warn('updateProfile: missing access token');
+      throw new UnauthorizedException('Missing access token');
+    }
+
+    let payload: any;
+    try {
+      payload = this.jwtService.verify(token);
+    } catch (e) {
+      this.logger.warn(`updateProfile: invalid access token: ${e?.message}`);
+      throw new UnauthorizedException('Invalid access token');
+    }
+
+    const userId = payload.userId;
+    if (!userId) {
+      this.logger.warn('updateProfile: token has no userId');
+      throw new UnauthorizedException('Invalid token payload');
+    }
+
     this.logger.log(
       `updateProfile endpoint called by userId=${userId} with body=${JSON.stringify(
         dto,
