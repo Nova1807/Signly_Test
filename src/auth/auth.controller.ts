@@ -21,6 +21,7 @@ import * as admin from 'firebase-admin';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { GlbService } from './glb.service';
 import { renderSuccessPageHtml, renderExpiredPageHtml } from './templates';
+import { UpdateProfileDto } from './update-profile.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -87,7 +88,6 @@ export class AuthController {
       `VERIFY ENDPOINT CALLED with token: ${token}, nameQuery: ${nameQuery}`,
     );
 
-    // Do NOT trust or use name supplied in the query string.
     const fallbackName = 'Nutzer';
 
     if (!token || token.trim() === '') {
@@ -151,7 +151,6 @@ export class AuthController {
     }
   }
 
-  // Google OAuth Start
   @Get('google')
   @UseGuards(GoogleAuthGuard)
   async googleAuth() {
@@ -159,7 +158,6 @@ export class AuthController {
     return;
   }
 
-  // Google OAuth Redirect → Deep-Link in die App
   @Get('google/redirect')
   @UseGuards(GoogleAuthGuard)
   async googleAuthRedirect(@Req() req: Request, @Res() res: Response) {
@@ -195,7 +193,21 @@ export class AuthController {
     return res.redirect(appRedirectUrl);
   }
 
-  // zentraler, geschützter GLB-Download-Endpunkt
+  // Profil-Update: userId kommt aus Body (damit kein Guard nötig ist)
+  @Post('profile')
+  async updateProfile(
+    @Body('userId') userId: string,
+    @Body() dto: UpdateProfileDto,
+  ) {
+    this.logger.log(
+      `updateProfile endpoint called by userId=${userId} with body=${JSON.stringify(
+        dto,
+      )}`,
+    );
+
+    return this.authService.updateProfile(userId, dto);
+  }
+
   @Get('glb')
   async getGlb(
     @Query('file') file: string,

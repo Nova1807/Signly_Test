@@ -13,6 +13,7 @@ import { JwtService } from '@nestjs/jwt';
 import { v4 as uuidv4 } from 'uuid';
 import { MailerService } from './mailer.service';
 import words from './words.json';
+import { UpdateProfileDto } from './update-profile.dto';
 
 @Injectable()
 export class AuthService {
@@ -49,8 +50,8 @@ export class AuthService {
   }
 
   /**
-   * Hilfsfunktion: Login-Streak aktualisieren.
-   * Nutzt lastLoginDate (reines YYYY-MM-DD String) im User-Dokument.
+   * Login-Streak aktualisieren.
+   * Nutzt lastLoginDate (YYYY-MM-DD) + loginStreak + longestLoginStreak im User-Dokument.
    */
   private updateLoginStreak(
     user: any,
@@ -78,13 +79,13 @@ export class AuthService {
       );
 
       if (diffDays === 0) {
-        // heute schon eingeloggt → nichts erhöhen
+        // heute schon eingeloggt → Streak bleibt
         loginStreak = loginStreak || 1;
       } else if (diffDays === 1) {
-        // gestern zuletzt → Streak +1
+        // gestern → Streak +1
         loginStreak = (loginStreak || 0) + 1;
       } else {
-        // Lücke → Streak reset
+        // Lücke → reset
         loginStreak = 1;
       }
     }
@@ -265,7 +266,6 @@ export class AuthService {
 
       await userDoc.ref.update({
         ...streakData,
-        lastLogin: admin.firestore.Timestamp.fromDate(now),
       });
 
       const tokens = await this.generateUserToken(userDoc.id);
@@ -447,10 +447,10 @@ export class AuthService {
         name,
         emailVerified: true,
         createdAt: admin.firestore.Timestamp.fromDate(new Date()),
-        lastLogin: null,
         loginStreak: 0,
         longestLoginStreak: 0,
         lastLoginDate: null,
+        aboutMe: '',
       });
 
       this.logger.log(
@@ -509,7 +509,7 @@ export class AuthService {
     let loginStreak = 0;
     let longestLoginStreak = 0;
 
-    // zuerst nach googleId
+    // nach googleId
     const googleIdQuery = await firestore
       .collection('users')
       .where('googleId', '==', googleUser.googleId)
@@ -524,7 +524,6 @@ export class AuthService {
 
       await userDoc.ref.update({
         ...streakData,
-        lastLogin: admin.firestore.Timestamp.fromDate(now),
       });
 
       loginStreak = streakData.loginStreak;
@@ -534,7 +533,7 @@ export class AuthService {
         `loginWithGoogle: found user by googleId=${googleUser.googleId}, userId=${userId}`,
       );
     } else {
-      // dann nach email
+      // nach email
       const emailQuery = await firestore
         .collection('users')
         .where('email', '==', googleUser.email)
@@ -550,7 +549,6 @@ export class AuthService {
         await userDoc.ref.update({
           googleId: googleUser.googleId,
           ...streakData,
-          lastLogin: admin.firestore.Timestamp.fromDate(now),
         });
 
         loginStreak = streakData.loginStreak;
@@ -577,7 +575,7 @@ export class AuthService {
           emailVerified: true,
           password: null,
           createdAt: admin.firestore.Timestamp.fromDate(now),
-          lastLogin: admin.firestore.Timestamp.fromDate(now),
+          aboutMe: '',
           ...streakData,
         });
 
@@ -602,6 +600,65 @@ export class AuthService {
       ...tokens,
       loginStreak,
       longestLoginStreak,
+    };
+  }
+
+  // Profil aktualisieren (Name + AboutMe)
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    this.logger.log(
+      `updateProfile start: userId=${userId}, dto=${JSON.stringify(dto)}`,
+    );
+
+    const firestore = this.firebaseApp.firestore();
+    const userRef = firestore.collection('users').doc(userId);
+    const userDoc = await userRef.get();
+
+    if (!userDoc.exists) {
+      this.logger.warn(`updateProfile: user not found: ${userId}`);
+      throw new BadRequestException('User not found');
+    }
+
+    const updates: Record<string, any> = {};
+
+    if (dto.name && dto.name.trim()) {
+      const newName = dto.name.trim();
+
+      const nameRef = firestore
+        .collection('users')
+        .where('name', '==', newName);
+      const nameSnapshot = await nameRef.get();
+
+      const conflict = nameSnapshot.docs.find((d) => d.id !== userId);
+      if (conflict) {
+        this.logger.warn(
+          `updateProfile: name already in use by other user: ${newName}`,
+        );
+        throw new BadRequestException(
+          'Dieser Benutzername ist bereits vergeben',
+        );
+      }
+
+      this.validateNameAgainstForbiddenWords(newName);
+
+      updates.name = newName;
+    }
+
+    if (typeof dto.aboutMe === 'string') {
+      updates.aboutMe = dto.aboutMe.trim();
+    }
+
+    if (Object.keys(updates).length === 0) {
+      this.logger.log('updateProfile: nothing to update');
+      return { success: true, message: 'Nothing to update' };
+    }
+
+    await userRef.update(updates);
+
+    this.logger.log(`updateProfile: updated user ${userId}`);
+    return {
+      success: true,
+      message: 'Profil aktualisiert',
+      updates,
     };
   }
 }
