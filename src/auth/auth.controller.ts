@@ -153,6 +153,7 @@ export class AuthController {
     }
   }
 
+  // Google OAuth Start
   @Get('google')
   @UseGuards(GoogleAuthGuard)
   async googleAuth() {
@@ -160,6 +161,7 @@ export class AuthController {
     return;
   }
 
+  // Google OAuth Redirect → Deep-Link in die App
   @Get('google/redirect')
   @UseGuards(GoogleAuthGuard)
   async googleAuthRedirect(@Req() req: Request, @Res() res: Response) {
@@ -195,23 +197,20 @@ export class AuthController {
     return res.redirect(appRedirectUrl);
   }
 
-  // Profil-Update: Access Token -> userId -> Firestore
+  // Profil-Update: accessToken + Profil-Daten im Body
   @Post('profile')
   async updateProfile(
-    @Req() req: Request,
+    @Body('accessToken') accessToken: string,
     @Body() dto: UpdateProfileDto,
   ) {
-    const authHeader = (req.headers['authorization'] as string) || '';
-    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-
-    if (!token) {
-      this.logger.warn('updateProfile: missing access token');
+    if (!accessToken) {
+      this.logger.warn('updateProfile: missing access token in body');
       throw new UnauthorizedException('Missing access token');
     }
 
     let payload: any;
     try {
-      payload = this.jwtService.verify(token);
+      payload = this.jwtService.verify(accessToken); // enthält userId
     } catch (e) {
       this.logger.warn(`updateProfile: invalid access token: ${e?.message}`);
       throw new UnauthorizedException('Invalid access token');
@@ -232,6 +231,7 @@ export class AuthController {
     return this.authService.updateProfile(userId, dto);
   }
 
+  // zentraler, geschützter GLB-Download-Endpunkt
   @Get('glb')
   async getGlb(
     @Query('file') file: string,
@@ -245,6 +245,7 @@ export class AuthController {
       }`,
     );
 
+    // Basic validation
     if (
       !file ||
       typeof file !== 'string' ||
@@ -254,6 +255,7 @@ export class AuthController {
       return res.status(400).json({ error: 'Invalid file parameter' });
     }
 
+    // extract token from query or Authorization header
     const authHeader =
       (req.headers && (req.headers['authorization'] as string)) || '';
     const bearerToken =
@@ -272,16 +274,19 @@ export class AuthController {
         accessToken,
         file,
       );
+      // tokenData kann zusätzliche Metadaten enthalten; hier nicht weiter verwendet
 
       const safeFile = this.glbService.sanitizeFilePath(file);
       await this.glbService.streamGlbFromStorage(safeFile, res);
       return;
     } catch (err: any) {
+      // specific errors already logged/translated inside helper methods
       this.logger.error(`getGlb ERROR: ${err?.message}`);
       if (err instanceof UnauthorizedException)
         return res.status(401).json({ error: err.message });
       if (err instanceof ForbiddenException)
         return res.status(403).json({ error: err.message });
+      // default
       return res.status(500).json({ error: 'Internal server error' });
     }
   }
