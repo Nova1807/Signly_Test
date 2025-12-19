@@ -42,11 +42,60 @@ export class AuthService {
       this.logger.warn(
         `signup: forbidden name "${name}" contains "${hit}"`,
       );
-      // gleicher Typ wie bei "Benutzername vergeben", andere Nachricht
       throw new BadRequestException(
         'Dieser Benutzername ist nicht erlaubt',
       );
     }
+  }
+
+  /**
+   * Hilfsfunktion: Login-Streak aktualisieren.
+   * Nutzt lastLoginDate (reines YYYY-MM-DD String) im User-Dokument.
+   */
+  private updateLoginStreak(
+    user: any,
+    now: Date,
+  ): { loginStreak: number; longestLoginStreak: number; lastLoginDate: string } {
+    const currentDate = now.toISOString().slice(0, 10); // YYYY-MM-DD
+
+    const last = user.lastLoginDate as string | undefined;
+    let loginStreak = user.loginStreak as number | undefined;
+    let longestLoginStreak = user.longestLoginStreak as number | undefined;
+
+    if (!last) {
+      // erster Login
+      loginStreak = 1;
+    } else {
+      const lastDate = new Date(last);
+      const diffDays = Math.floor(
+        (Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) -
+          Date.UTC(
+            lastDate.getFullYear(),
+            lastDate.getMonth(),
+            lastDate.getDate(),
+          )) /
+          (1000 * 60 * 60 * 24),
+      );
+
+      if (diffDays === 0) {
+        // heute schon eingeloggt → nichts erhöhen
+        loginStreak = loginStreak || 1;
+      } else if (diffDays === 1) {
+        // gestern zuletzt → Streak +1
+        loginStreak = (loginStreak || 0) + 1;
+      } else {
+        // Lücke → Streak reset
+        loginStreak = 1;
+      }
+    }
+
+    longestLoginStreak = Math.max(longestLoginStreak || 0, loginStreak || 0);
+
+    return {
+      loginStreak,
+      longestLoginStreak,
+      lastLoginDate: currentDate,
+    };
   }
 
   async signup(signupData: SignupDto) {
@@ -77,7 +126,7 @@ export class AuthService {
       throw new BadRequestException('Name ist erforderlich');
     }
 
-    // NEU: Name gegen Schimpfwörter prüfen
+    // Name gegen Schimpfwörter prüfen
     this.validateNameAgainstForbiddenWords(name);
 
     try {
@@ -210,9 +259,23 @@ export class AuthService {
         throw new UnauthorizedException('Wrong credentials');
       }
 
+      // Login-Streak aktualisieren
+      const now = new Date();
+      const streakData = this.updateLoginStreak(user, now);
+
+      await userDoc.ref.update({
+        ...streakData,
+        lastLogin: admin.firestore.Timestamp.fromDate(now),
+      });
+
       const tokens = await this.generateUserToken(userDoc.id);
       this.logger.log('login: tokens generated');
-      return tokens;
+
+      return {
+        ...tokens,
+        loginStreak: streakData.loginStreak,
+        longestLoginStreak: streakData.longestLoginStreak,
+      };
     } catch (err) {
       this.logger.error(`login internal error: ${err?.message}`, err?.stack);
       throw err;
@@ -385,6 +448,9 @@ export class AuthService {
         emailVerified: true,
         createdAt: admin.firestore.Timestamp.fromDate(new Date()),
         lastLogin: null,
+        loginStreak: 0,
+        longestLoginStreak: 0,
+        lastLoginDate: null,
       });
 
       this.logger.log(
@@ -420,7 +486,7 @@ export class AuthService {
     }
   }
 
-  // NEU: Google-Login
+  // Google-Login mit Login-Streak
   async loginWithGoogle(googleUser: {
     email: string;
     name: string;
@@ -438,20 +504,37 @@ export class AuthService {
     const firestore = this.firebaseApp.firestore();
     this.logger.log('loginWithGoogle: got firestore instance');
 
+    const now = new Date();
+    let userId: string | null = null;
+    let loginStreak = 0;
+    let longestLoginStreak = 0;
+
+    // zuerst nach googleId
     const googleIdQuery = await firestore
       .collection('users')
       .where('googleId', '==', googleUser.googleId)
       .get();
 
-    let userId: string | null = null;
-
     if (!googleIdQuery.empty) {
       const userDoc = googleIdQuery.docs[0];
+      const user = userDoc.data() as any;
       userId = userDoc.id;
+
+      const streakData = this.updateLoginStreak(user, now);
+
+      await userDoc.ref.update({
+        ...streakData,
+        lastLogin: admin.firestore.Timestamp.fromDate(now),
+      });
+
+      loginStreak = streakData.loginStreak;
+      longestLoginStreak = streakData.longestLoginStreak;
+
       this.logger.log(
         `loginWithGoogle: found user by googleId=${googleUser.googleId}, userId=${userId}`,
       );
     } else {
+      // dann nach email
       const emailQuery = await firestore
         .collection('users')
         .where('email', '==', googleUser.email)
@@ -459,16 +542,30 @@ export class AuthService {
 
       if (!emailQuery.empty) {
         const userDoc = emailQuery.docs[0];
+        const user = userDoc.data() as any;
         userId = userDoc.id;
-        this.logger.log(
-          `loginWithGoogle: found existing user by email=${googleUser.email}, userId=${userId}`,
-        );
+
+        const streakData = this.updateLoginStreak(user, now);
 
         await userDoc.ref.update({
           googleId: googleUser.googleId,
-          lastLogin: admin.firestore.Timestamp.fromDate(new Date()),
+          ...streakData,
+          lastLogin: admin.firestore.Timestamp.fromDate(now),
         });
+
+        loginStreak = streakData.loginStreak;
+        longestLoginStreak = streakData.longestLoginStreak;
+
+        this.logger.log(
+          `loginWithGoogle: found existing user by email=${googleUser.email}, userId=${userId}`,
+        );
       } else {
+        // neuer User
+        const streakData = this.updateLoginStreak(
+          { lastLoginDate: null, loginStreak: 0, longestLoginStreak: 0 },
+          now,
+        );
+
         this.logger.log(
           `loginWithGoogle: creating new user for email=${googleUser.email}`,
         );
@@ -479,11 +576,15 @@ export class AuthService {
           googleId: googleUser.googleId,
           emailVerified: true,
           password: null,
-          createdAt: admin.firestore.Timestamp.fromDate(new Date()),
-          lastLogin: admin.firestore.Timestamp.fromDate(new Date()),
+          createdAt: admin.firestore.Timestamp.fromDate(now),
+          lastLogin: admin.firestore.Timestamp.fromDate(now),
+          ...streakData,
         });
 
         userId = newUserRef.id;
+        loginStreak = streakData.loginStreak;
+        longestLoginStreak = streakData.longestLoginStreak;
+
         this.logger.log(
           `loginWithGoogle: new user created with ID=${userId}`,
         );
@@ -497,6 +598,10 @@ export class AuthService {
 
     const tokens = await this.generateUserToken(userId);
     this.logger.log('loginWithGoogle: tokens generated');
-    return tokens;
+    return {
+      ...tokens,
+      loginStreak,
+      longestLoginStreak,
+    };
   }
 }

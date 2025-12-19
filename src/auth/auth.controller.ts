@@ -50,7 +50,9 @@ export class AuthController {
     this.logger.log(`login called with body: ${JSON.stringify(credentials)}`);
     try {
       const result = await this.authService.login(credentials);
-      this.logger.log('login finished successfully');
+      this.logger.log(
+        `login finished successfully (streak=${result.loginStreak}, longest=${result.longestLoginStreak})`,
+      );
       return result;
     } catch (err) {
       this.logger.error(`login error: ${err?.message}`, err?.stack);
@@ -85,10 +87,8 @@ export class AuthController {
       `VERIFY ENDPOINT CALLED with token: ${token}, nameQuery: ${nameQuery}`,
     );
 
-  // Do NOT trust or use name supplied in the query string. The verification
-  // link must never carry user-identifying information. We will read the
-  // confirmed name from the server-side verification result instead.
-  const fallbackName = 'Nutzer';
+    // Do NOT trust or use name supplied in the query string.
+    const fallbackName = 'Nutzer';
 
     if (!token || token.trim() === '') {
       this.logger.warn('verify: empty token provided');
@@ -96,9 +96,6 @@ export class AuthController {
     }
 
     try {
-      // Delegate the verification logic to AuthService which handles
-      // creating the user and deleting the token. We still keep a quick
-      // Firestore-based expiry check here (defence-in-depth).
       const firestore = this.firebaseApp.firestore();
 
       const docRef = firestore.collection('emailVerifications').doc(token);
@@ -154,16 +151,15 @@ export class AuthController {
     }
   }
 
-  // NEU: Google OAuth Start
+  // Google OAuth Start
   @Get('google')
   @UseGuards(GoogleAuthGuard)
   async googleAuth() {
     this.logger.log('googleAuth endpoint called');
-    // Redirect zu Google macht der Guard/Passport
     return;
   }
 
-  // NEU: Google OAuth Redirect → Deep-Link in die App
+  // Google OAuth Redirect → Deep-Link in die App
   @Get('google/redirect')
   @UseGuards(GoogleAuthGuard)
   async googleAuthRedirect(@Req() req: Request, @Res() res: Response) {
@@ -177,20 +173,29 @@ export class AuthController {
       googleId: string;
     };
 
-    const { accessToken, refreshToken } =
-      await this.authService.loginWithGoogle(googleUser);
+    const {
+      accessToken,
+      refreshToken,
+      loginStreak,
+      longestLoginStreak,
+    } = await this.authService.loginWithGoogle(googleUser);
 
-    // Deep-Link in deine App – Scheme/Path bei Bedarf anpassen
     const appRedirectUrl =
       `signly://auth/google` +
       `?accessToken=${encodeURIComponent(accessToken)}` +
-      `&refreshToken=${encodeURIComponent(refreshToken)}`;
+      `&refreshToken=${encodeURIComponent(refreshToken)}` +
+      `&loginStreak=${encodeURIComponent(String(loginStreak ?? 0))}` +
+      `&longestLoginStreak=${encodeURIComponent(
+        String(longestLoginStreak ?? 0),
+      )}`;
 
-    this.logger.log(`googleAuthRedirect redirecting to ${appRedirectUrl}`);
+    this.logger.log(
+      `googleAuthRedirect redirecting to ${appRedirectUrl}`,
+    );
     return res.redirect(appRedirectUrl);
   }
 
-  // Neu: zentraler, geschützter GLB-Download-Endpunkt
+  // zentraler, geschützter GLB-Download-Endpunkt
   @Get('glb')
   async getGlb(
     @Query('file') file: string,
@@ -204,7 +209,6 @@ export class AuthController {
       }`,
     );
 
-    // Basic validation
     if (
       !file ||
       typeof file !== 'string' ||
@@ -214,7 +218,6 @@ export class AuthController {
       return res.status(400).json({ error: 'Invalid file parameter' });
     }
 
-    // extract token from query or Authorization header
     const authHeader =
       (req.headers && (req.headers['authorization'] as string)) || '';
     const bearerToken =
@@ -229,20 +232,20 @@ export class AuthController {
     }
 
     try {
-      const tokenData = await this.glbService.validateGlbToken(accessToken, file);
-      // tokenData kann zusätzliche Metadaten enthalten; hier nicht weiter verwendet
+      const tokenData = await this.glbService.validateGlbToken(
+        accessToken,
+        file,
+      );
 
       const safeFile = this.glbService.sanitizeFilePath(file);
       await this.glbService.streamGlbFromStorage(safeFile, res);
       return;
     } catch (err: any) {
-      // specific errors already logged/translated inside helper methods
       this.logger.error(`getGlb ERROR: ${err?.message}`);
       if (err instanceof UnauthorizedException)
         return res.status(401).json({ error: err.message });
       if (err instanceof ForbiddenException)
         return res.status(403).json({ error: err.message });
-      // default
       return res.status(500).json({ error: 'Internal server error' });
     }
   }
