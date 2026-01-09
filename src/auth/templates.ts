@@ -6,6 +6,7 @@ export function renderSuccessPageHtml(name: string) {
 
   const baseUrl = 'https://backend.signly.at';
   const assetsBaseUrl = `${baseUrl}/email-assets`;
+  const appIconUrl = 'https://storage.googleapis.com/signlydaten/schlange/signly_App_Icon.png';
 
   return `
       <!DOCTYPE html>
@@ -100,6 +101,12 @@ export function renderSuccessPageHtml(name: string) {
             margin-top: 10px;
           }
 
+          .header-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+          }
+
           .pill {
             font-size: 11px;
             padding: 4px 10px;
@@ -107,6 +114,16 @@ export function renderSuccessPageHtml(name: string) {
             border: 1px solid rgba(15,23,42,0.08);
             background: rgba(255,255,255,0.8);
             color: var(--text-muted);
+          }
+
+          .app-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            border: 1px solid rgba(59,130,196,0.35);
+            box-shadow: 0 8px 18px rgba(15,23,42,0.18);
+            background: #ffffff;
+            display: block;
           }
 
           .hero {
@@ -132,6 +149,7 @@ export function renderSuccessPageHtml(name: string) {
             flex: 1;
             text-align: left;
           }
+
           .status-icon {
             width: 40px;
             height: 40px;
@@ -215,6 +233,10 @@ export function renderSuccessPageHtml(name: string) {
             .card-header {
               flex-direction: row;
             }
+
+            .header-right {
+              gap: 8px;
+            }
           }
         </style>
       </head>
@@ -233,7 +255,15 @@ export function renderSuccessPageHtml(name: string) {
                 />
                 <span class="brand-name">ignly</span>
               </div>
-              <div class="pill">E-Mail bestätigt</div>
+              <div class="header-right">
+                <div class="pill">E-Mail bestätigt</div>
+                <img
+                  src="${appIconUrl}"
+                  alt="Signly App Icon"
+                  class="app-icon"
+                  loading="eager"
+                />
+              </div>
             </header>
 
             <section class="hero">
@@ -375,6 +405,7 @@ export function renderSuccessPageHtml(name: string) {
 export function renderExpiredPageHtml() {
   const baseUrl = 'https://backend.signly.at';
   const assetsBaseUrl = `${baseUrl}/email-assets`;
+  const appIconUrl = 'https://storage.googleapis.com/signlydaten/schlange/signly_App_Icon.png';
 
   return `
       <!DOCTYPE html>
@@ -468,6 +499,12 @@ export function renderExpiredPageHtml() {
             margin-top: 10px;
           }
 
+          .header-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+          }
+
           .pill {
             font-size: 11px;
             padding: 4px 10px;
@@ -475,6 +512,16 @@ export function renderExpiredPageHtml() {
             border: 1px solid rgba(248,113,113,0.5);
             background: rgba(254,242,242,0.9);
             color: #b91c1c;
+          }
+
+          .app-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            border: 1px solid rgba(248,113,113,0.6);
+            box-shadow: 0 8px 18px rgba(127,29,29,0.25);
+            background: #ffffff;
+            display: block;
           }
 
           .hero {
@@ -571,6 +618,10 @@ export function renderExpiredPageHtml() {
             .card-header {
               flex-direction: row;
             }
+
+            .header-right {
+              gap: 8px;
+            }
           }
         </style>
       </head>
@@ -587,7 +638,15 @@ export function renderExpiredPageHtml() {
                 />
                 <span class="brand-name">ignly</span>
               </div>
-              <div class="pill">Link abgelaufen</div>
+              <div class="header-right">
+                <div class="pill">Link abgelaufen</div>
+                <img
+                  src="${appIconUrl}"
+                  alt="Signly App Icon"
+                  class="app-icon"
+                  loading="eager"
+                />
+              </div>
             </header>
 
             <section class="hero">

@@ -31,6 +31,7 @@ export class MailerService {
 
     const baseUrl = 'https://backend.signly.at';
     const assetsBaseUrl = `${baseUrl}/email-assets`;
+    const appIconUrl = 'https://storage.googleapis.com/signlydaten/schlange/signly_App_Icon.png';
 
     const mailOptions = {
       from: `"Signly" <${process.env.EMAIL_USER}>`,
@@ -47,13 +48,27 @@ export class MailerService {
                        style="max-width:600px; background-color:#ffffff; border-radius:16px; 
                               box-shadow:0 10px 25px rgba(0,0,0,0.06); padding:24px 24px 28px;">
 
+                  <!-- Header: Logo + App-Icon-Badge -->
                   <tr>
-                    <td align="left" style="padding-bottom:8px;">
-                      <img src="https://storage.googleapis.com/signlydaten/schlange/Logo.png"
-                           alt="Signly Logo"
-                           width="64"
-                           height="36"
-                           style="display:block; height:auto;" />
+                    <td style="padding-bottom:8px;">
+                      <table width="100%" cellspacing="0" cellpadding="0" role="presentation" style="border-collapse:collapse;">
+                        <tr>
+                          <td align="left" valign="middle">
+                            <img src="https://storage.googleapis.com/signlydaten/schlange/Logo.png"
+                                 alt="Signly Logo"
+                                 width="64"
+                                 height="36"
+                                 style="display:block; height:auto;" />
+                          </td>
+                          <td align="right" valign="middle">
+                            <img src="${appIconUrl}"
+                                 alt="Signly App Icon"
+                                 width="32"
+                                 height="32"
+                                 style="display:block; border-radius:10px; border:1px solid #e2e8f0; background:#ffffff;" />
+                          </td>
+                        </tr>
+                      </table>
                     </td>
                   </tr>
 
