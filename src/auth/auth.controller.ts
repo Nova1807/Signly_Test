@@ -233,6 +233,45 @@ export class AuthController {
     return this.authService.updateProfile(userId, profileDto);
   }
 
+  // GET current login streaks for the authenticated user
+  @Get('streak')
+  async getStreak(
+    @Query('accessToken') accessTokenQuery: string | undefined,
+    @Req() req: Request,
+  ) {
+    this.logger.log(
+      `getStreak called, tokenProvided=${accessTokenQuery ? '[q]' : '[no-q]'}`,
+    );
+
+    const authHeader =
+      (req.headers && (req.headers['authorization'] as string)) || '';
+    const bearerToken = authHeader?.replace(/^Bearer\s+/i, '') || undefined;
+    const accessToken =
+      (accessTokenQuery && accessTokenQuery.trim()) ||
+      (bearerToken && bearerToken.trim());
+
+    if (!accessToken) {
+      this.logger.warn('getStreak: missing access token');
+      throw new UnauthorizedException('Missing access token');
+    }
+
+    let payload: any;
+    try {
+      payload = this.jwtService.verify(accessToken);
+    } catch (e) {
+      this.logger.warn(`getStreak: invalid access token: ${e?.message}`);
+      throw new UnauthorizedException('Invalid access token');
+    }
+
+    const userId = payload.userId;
+    if (!userId) {
+      this.logger.warn('getStreak: token has no userId');
+      throw new UnauthorizedException('Invalid token payload');
+    }
+
+    return this.authService.getStreak(userId);
+  }
+
   // zentraler, geschützter GLB-Download-Endpunkt
   @Get('glb')
   async getGlb(

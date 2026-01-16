@@ -661,4 +661,29 @@ export class AuthService {
       updates,
     };
   }
+
+  /**
+   * Returns the current login streak information for a given userId.
+   * Used by the frontend to display the user's current streak without
+   * modifying it.
+   */
+  async getStreak(userId: string) {
+    this.logger.log(`getStreak start: userId=${userId}`);
+    const firestore = this.firebaseApp.firestore();
+    const userRef = firestore.collection('users').doc(userId);
+    const userDoc = await userRef.get();
+
+    if (!userDoc.exists) {
+      this.logger.warn(`getStreak: user not found: ${userId}`);
+      throw new BadRequestException('User not found');
+    }
+
+    const user = userDoc.data() as any;
+    return {
+      success: true,
+      loginStreak: (user && (user.loginStreak as number)) || 0,
+      longestLoginStreak: (user && (user.longestLoginStreak as number)) || 0,
+      lastLoginDate: (user && user.lastLoginDate) || null,
+    };
+  }
 }
