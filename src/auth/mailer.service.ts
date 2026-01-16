@@ -1,23 +1,37 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 
+
 @Injectable()
 export class MailerService {
   private readonly logger = new Logger(MailerService.name);
 
+
   async sendVerificationEmail(email: string, token: string, name?: string) {
     this.logger.log(`sendVerificationEmail start: email=${email}, name='${name || ''}'`);
+
 
     const encodedToken = encodeURIComponent(token);
     this.logger.log(`sendVerificationEmail: raw token=${token}`);
     this.logger.log(`sendVerificationEmail: encoded token=${encodedToken}`);
 
+
+    const user = process.env.BREVO_SMTP_USER;
+    const pass = process.env.BREVO_SMTP_KEY;
+
+
+    if (!user || !pass) {
+      this.logger.error('Missing Brevo SMTP credentials. Set BREVO_SMTP_USER and BREVO_SMTP_KEY.');
+      throw new Error('Missing Brevo SMTP credentials');
+    }
+
+
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
+      host: 'smtp-relay.brevo.com',
+      port: 587,
+      secure: false,
+      auth: { user, pass },
+      requireTLS: true,
       pool: true,
       maxConnections: 1,
       tls: {
@@ -25,16 +39,20 @@ export class MailerService {
       },
     });
 
+
     const baseVerifyUrl = 'https://backend.signly.at/auth/verify';
     const verifyUrl = `${baseVerifyUrl}?token=${encodedToken}`;
     this.logger.log(`sendVerificationEmail: verify URL: ${verifyUrl}`);
+
 
     const baseUrl = 'https://backend.signly.at';
     const assetsBaseUrl = `${baseUrl}/email-assets`;
     const appIconUrl = 'https://storage.googleapis.com/signlydaten/schlange/signly_App_Icon.png';
 
+
     const mailOptions = {
-      from: `"Signly" <${process.env.EMAIL_USER}>`,
+      from: `"Signly Support" <support@signly.at>`,
+      replyTo: `"Signly Support" <support@signly.at>`,
       to: email,
       subject: 'Bestätige deine E-Mail-Adresse für Signly',
       html: `
@@ -47,6 +65,7 @@ export class MailerService {
                 <table width="100%" cellspacing="0" cellpadding="0" 
                        style="max-width:600px; background-color:#ffffff; border-radius:16px; 
                               box-shadow:0 10px 25px rgba(0,0,0,0.06); padding:24px 24px 28px;">
+
 
                   <!-- Header: Logo + App-Icon-Badge -->
                   <tr>
@@ -72,6 +91,7 @@ export class MailerService {
                     </td>
                   </tr>
 
+
                   <tr>
                     <td align="center" style="padding-bottom:16px;">
                       <img src="https://storage.googleapis.com/signlydaten/schlange/Maskotchen.png"
@@ -82,6 +102,7 @@ export class MailerService {
                     </td>
                   </tr>
 
+
                   <tr>
                     <td align="center" 
                         style="font-family:Arial, sans-serif; padding:8px 16px 4px;">
@@ -90,6 +111,7 @@ export class MailerService {
                       </h1>
                     </td>
                   </tr>
+
 
                   <tr>
                     <td align="center" 
@@ -100,6 +122,7 @@ export class MailerService {
                       </p>
                     </td>
                   </tr>
+
 
                   <tr>
                     <td align="center" style="padding:20px 16px 4px;">
@@ -122,6 +145,7 @@ export class MailerService {
                     </td>
                   </tr>
 
+
                   <tr>
                     <td align="center" 
                         style="font-family:Arial, sans-serif; padding:12px 24px 16px;">
@@ -130,6 +154,7 @@ export class MailerService {
                       </p>
                     </td>
                   </tr>
+
 
                   <tr>
                     <td style="font-family:Arial, sans-serif; padding:8px 24px 16px;">
@@ -142,6 +167,7 @@ export class MailerService {
                     </td>
                   </tr>
 
+
                   <tr>
                     <td style="font-family:Arial, sans-serif; padding:16px 24px 8px;">
                       <p style="margin:0; font-size:11px; color:#a0aec0;">
@@ -150,6 +176,7 @@ export class MailerService {
                       </p>
                     </td>
                   </tr>
+
 
                   <tr>
                     <td align="center" 
@@ -172,6 +199,7 @@ export class MailerService {
         Importance: 'high',
       },
     };
+
 
     try {
       const info = await transporter.sendMail(mailOptions);
