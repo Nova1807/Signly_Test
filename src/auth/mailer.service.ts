@@ -27,7 +27,7 @@ export class MailerService {
     const transporter = nodemailer.createTransport({
       host: 'smtp-relay.brevo.com',
       port: 587,
-      secure: false, // STARTTLS on 587 is the recommended default for Brevo SMTP relay [web:57][web:60]
+      secure: false,
       auth: { user, pass },
       requireTLS: true,
       pool: true,
@@ -42,13 +42,14 @@ export class MailerService {
     this.logger.log(`sendVerificationEmail: verify URL: ${verifyUrl}`);
 
     // Use image links 1:1 as requested
-    const logoUrl = 'https://storage.googleapis.com/signlydaten/schlange/Logo.png';
+    const logoUrl =
+      'https://storage.googleapis.com/signlydaten/schlange/Signly_logo_color_flatt2.png';
     const appIconUrl =
       'https://storage.googleapis.com/signlydaten/schlange/signly_App_Icon.png';
     const mascotUrl =
       'https://storage.googleapis.com/signlydaten/schlange/Maskotchen.png';
 
-    const subject = 'Signly: Bitte E-Mail bestätigen';
+    const subject = 'Bestätige deine E-Mail-Adresse für Signly';
 
     const text = [
       `Hallo${name ? ` ${name}` : ''},`,
@@ -69,41 +70,46 @@ export class MailerService {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="x-apple-disable-message-reformatting" />
-  <title>E-Mail bestätigen</title>
+  <title>Signly – E-Mail bestätigen</title>
 </head>
 
-<body style="margin:0; padding:0; background-color:#f4fbff;">
-  <!-- Preheader (Inbox preview) -->
+<body style="margin:0; padding:0; background-color:#f4fbff; font-family: Arial, sans-serif; color:#0b2135;">
+  <!-- Preheader -->
   <div style="display:none; font-size:1px; line-height:1px; max-height:0; max-width:0; opacity:0; overflow:hidden;">
-    Bestätige deine E-Mail-Adresse, um deinen Signly-Account zu aktivieren. Link ist 15 Minuten gültig.
+    Bitte bestätige deine E-Mail-Adresse, um deinen Signly-Account zu aktivieren. Link gültig für 15 Minuten.
   </div>
 
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f4fbff; padding:24px 0;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f4fbff; padding:28px 0;">
     <tr>
-      <td align="center" style="padding:0 12px;">
-        <table role="presentation" width="600" cellspacing="0" cellpadding="0"
-          style="width:100%; max-width:600px; background:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 10px 25px rgba(0,0,0,0.06);">
+      <td style="text-align:center; padding:0 12px;">
 
-          <!-- Header -->
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0"
+               style="width:100%; max-width:600px; background:#ffffff; border-radius:22px; overflow:hidden; box-shadow:0 14px 34px rgba(11,33,53,0.10); margin:0 auto;">
+
+          <!-- Brand header (centered, bigger) -->
           <tr>
-            <td style="padding:18px 18px 10px;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+            <td style="padding:24px 22px 6px; text-align:center; background:#ffffff;">
+              <img
+                src="${logoUrl}"
+                alt="Signly"
+                width="240"
+                style="display:block; height:auto; margin:0 auto;"
+              />
+            </td>
+          </tr>
+
+          <!-- Mascot hero (tinted card) -->
+          <tr>
+            <td style="padding:14px 22px 0; text-align:center; background:#ffffff;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+                     style="background:#e9fbff; border-radius:16px; overflow:hidden;">
                 <tr>
-                  <td align="left" valign="middle">
+                  <td style="padding:16px 14px; text-align:center;">
                     <img
-                      src="${logoUrl}"
-                      alt="Signly"
-                      width="96"
-                      style="display:block; height:auto;"
-                    />
-                  </td>
-                  <td align="right" valign="middle">
-                    <img
-                      src="${appIconUrl}"
-                      alt="Signly App Icon"
-                      width="36"
-                      height="36"
-                      style="display:block; border-radius:10px; border:1px solid #e2e8f0; background:#ffffff;"
+                      src="${mascotUrl}"
+                      alt="Signly Maskotchen"
+                      width="240"
+                      style="display:block; height:auto; margin:0 auto;"
                     />
                   </td>
                 </tr>
@@ -111,46 +117,24 @@ export class MailerService {
             </td>
           </tr>
 
-          <!-- Body -->
+          <!-- Copy centered -->
           <tr>
-            <td style="padding:10px 22px 0; font-family:Arial, sans-serif; color:#0b2135;">
-              <h1 style="margin:0; font-size:22px; line-height:1.25;">
+            <td style="padding:16px 26px 0; text-align:center; background:#ffffff;">
+              <h1 style="margin:0; font-size:22px; line-height:1.25; color:#0b2135;">
                 E-Mail-Adresse bestätigen${name ? `, ${name}` : ``}
               </h1>
-              <p style="margin:10px 0 0; font-size:14px; line-height:1.6; color:#4a5568;">
-                Bitte bestätige deine E-Mail-Adresse, um deinen Signly-Account zu aktivieren.
+              <p style="margin:10px 0 0; font-size:14px; line-height:1.65; color:#3b4a5a;">
+                Fast geschafft! Bitte bestätige deine E-Mail-Adresse, damit dein Signly-Account aktiviert werden kann.
               </p>
             </td>
           </tr>
 
-          <!-- Small mascot row (reduced, not hero) -->
+          <!-- CTA with glow (progressive enhancement) -->
           <tr>
-            <td style="padding:14px 22px 0;">
-              <table role="presentation" cellspacing="0" cellpadding="0">
-                <tr>
-                  <td valign="middle" style="padding-right:10px;">
-                    <img
-                      src="${mascotUrl}"
-                      alt="Signly Maskotchen"
-                      width="56"
-                      height="56"
-                      style="display:block; border-radius:14px;"
-                    />
-                  </td>
-                  <td valign="middle" style="font-family:Arial, sans-serif; font-size:12px; line-height:1.5; color:#718096;">
-                    Link gültig für <strong>15 Minuten</strong>.
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-
-          <!-- CTA (bulletproof button with VML for Outlook) -->
-          <tr>
-            <td align="center" style="padding:18px 22px 8px;">
+            <td style="padding:18px 26px 0; text-align:center; background:#ffffff;">
               <!--[if mso]>
                 <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word"
-                  href="${verifyUrl}" style="height:46px; v-text-anchor:middle; width:280px;" arcsize="50%"
+                  href="${verifyUrl}" style="height:46px; v-text-anchor:middle; width:280px;" arcsize="25%"
                   strokecolor="#1e6fb8" fillcolor="#1e6fb8">
                   <w:anchorlock/>
                   <center style="color:#ffffff; font-family:Arial, sans-serif; font-size:15px; font-weight:bold;">
@@ -160,44 +144,46 @@ export class MailerService {
               <![endif]-->
               <!--[if !mso]><!-- -->
               <a href="${verifyUrl}"
-                 style="display:inline-block; background:#1e6fb8; color:#ffffff; font-family:Arial, sans-serif;
-                        font-size:15px; font-weight:bold; text-decoration:none; padding:13px 26px; border-radius:999px;">
+                 style="display:inline-block; background:#1e6fb8; color:#ffffff;
+                        font-size:15px; font-weight:bold; text-decoration:none;
+                        padding:14px 28px; border-radius:14px;
+                        box-shadow:0 10px 26px rgba(30,111,184,0.45);">
                 E-Mail bestätigen
               </a>
               <!--<![endif]-->
+
+              <p style="margin:10px 0 0; font-size:12px; color:#64748b;">
+                Der Link ist <strong>15 Minuten</strong> gültig.
+              </p>
             </td>
           </tr>
 
-          <!-- Fallback link -->
+          <!-- Safety note -->
           <tr>
-            <td style="padding:8px 22px 0; font-family:Arial, sans-serif;">
-              <p style="margin:0; font-size:12px; line-height:1.6; color:#718096;">
-                Wenn der Button nicht funktioniert, öffne diesen Link:
-              </p>
-              <p style="margin:6px 0 0; font-size:12px; line-height:1.6; word-break:break-all;">
-                <a href="${verifyUrl}" style="color:#1e6fb8; text-decoration:underline;">
-                  ${verifyUrl}
+            <td style="padding:14px 26px 22px; text-align:center; background:#ffffff;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+                     style="background:#e9fbff; border-radius:12px;">
+                <tr>
+                  <td style="padding:12px 12px; text-align:center;">
+                    <p style="margin:0; font-size:12px; line-height:1.6; color:#64748b;">
+                      Wenn du dich nicht bei Signly registriert hast, kannst du diese E-Mail ignorieren.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer (centered) -->
+          <tr>
+            <td style="border-top:1px solid #e8f1f8; padding:14px 26px 18px; text-align:center; background:#ffffff;">
+              <p style="margin:0; font-size:11px; color:#94a3b8;">
+                Support:
+                <a href="mailto:support@signly.at" style="color:#1e6fb8; text-decoration:underline;">
+                  support@signly.at
                 </a>
               </p>
-            </td>
-          </tr>
-
-          <!-- Security note -->
-          <tr>
-            <td style="padding:14px 22px 18px; font-family:Arial, sans-serif;">
-              <p style="margin:0; font-size:12px; line-height:1.6; color:#a0aec0;">
-                Wenn du dich nicht bei Signly registriert hast, kannst du diese E-Mail ignorieren.
-              </p>
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td style="border-top:1px solid #e2e8f0; padding:12px 22px 16px; font-family:Arial, sans-serif;">
-              <p style="margin:0; font-size:11px; color:#a0aec0;">
-                Signly Support · <a href="mailto:support@signly.at" style="color:#a0aec0; text-decoration:underline;">support@signly.at</a>
-              </p>
-              <p style="margin:6px 0 0; font-size:11px; color:#a0aec0;">
+              <p style="margin:6px 0 0; font-size:11px; color:#94a3b8;">
                 © ${new Date().getFullYear()} Signly. Alle Rechte vorbehalten.
               </p>
             </td>
@@ -215,11 +201,8 @@ export class MailerService {
       replyTo: `"Signly Support" <support@signly.at>`,
       to: email,
       subject,
-      text, // multipart/alternative via Nodemailer fields [web:50]
-      html, // clear CTA + fallback link is standard for verification emails [web:38]
-      headers: {
-        // Avoid “high priority” for deliverability; keep transactional clean and standard [web:40]
-      },
+      text,
+      html,
     };
 
     try {
