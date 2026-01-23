@@ -248,12 +248,11 @@ export function renderSuccessPageHtml(name: string) {
             <header class="card-header">
               <div class="logo">
                 <img
-                  src="https://storage.googleapis.com/signlydaten/schlange/Logo.png"
+                  src="https://storage.googleapis.com/signlydaten/schlange/Signly_logo_color_flatt2.png"
                   alt="Signly Logo"
                   style="height: 36px; width: auto;"
                   loading="eager"
                 />
-                <span class="brand-name">ignly</span>
               </div>
               <div class="header-right">
                 <div class="pill">E-Mail bestätigt</div>
@@ -631,12 +630,11 @@ export function renderExpiredPageHtml() {
             <header class="card-header">
               <div class="logo">
                 <img
-                  src="https://storage.googleapis.com/signlydaten/schlange/Logo.png"
+                  src="https://storage.googleapis.com/signlydaten/schlange/Signly_logo_color_flatt2.png"
                   alt="Signly Logo"
                   style="height: 36px; width: auto;"
                   loading="eager"
                 />
-                <span class="brand-name">ignly</span>
               </div>
               <div class="header-right">
                 <div class="pill">Link abgelaufen</div>
