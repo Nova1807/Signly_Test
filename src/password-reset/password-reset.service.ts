@@ -396,7 +396,6 @@ export class PasswordResetService {
           <button class="btn" type="submit">Passwort speichern</button>
           <div id="error" class="error">Etwas ist schiefgelaufen. Bitte versuche es erneut.</div>
           <div id="success" class="success">Dein Passwort wurde gespeichert. Du kannst dieses Fenster schließen.</div>
-          <div class="hint">Wenn der Link abgelaufen ist, fordere bitte ein neues Passwort an.</div>
         </form>
       </section>
     </div>
@@ -517,33 +516,10 @@ export class PasswordResetService {
     // Token als verwendet markieren (oder löschen)
     await docRef.update({ used: true });
 
-    // HTML-Erfolgseite zurückgeben, damit der User eine schöne Bestätigung sieht
-    const successHtml = `<!DOCTYPE html>
-<html lang="de">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Passwort gespeichert – Signly</title>
-  <style>
-    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:#f4fbff; margin:0; padding:0; color:#0f172a; }
-    .page { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px 12px; }
-    .card { background:#ffffff; border-radius:22px; max-width:420px; width:100%; padding:22px 24px 24px; box-shadow:0 14px 34px rgba(11,33,53,0.10); box-sizing:border-box; text-align:center; }
-    h1 { margin:0 0 10px; font-size:22px; color:#0b2135; }
-    p { margin:0 0 10px; font-size:14px; color:#3b4a5a; }
-    .ok { margin-top:14px; font-size:13px; color:#15803d; font-weight:500; }
-  </style>
-</head>
-<body>
-  <div class="page">
-    <div class="card">
-      <h1>Passwort gespeichert</h1>
-      <p>Dein neues Passwort wurde erfolgreich gespeichert.</p>
-      <p class="ok">Du kannst dieses Fenster jetzt schließen und dich in der App mit deinem neuen Passwort anmelden.</p>
-    </div>
-  </div>
-</body>
-</html>`;
-
-    return successHtml;
+    // JSON-Response für das Formular, damit kein Fehler im Frontend angezeigt wird
+    return {
+      success: true,
+      message: 'Dein Passwort wurde erfolgreich gespeichert.',
+    };
   }
 }
