@@ -88,25 +88,31 @@ export class PasswordResetService {
 
   // Einfaches HTML-Formular, das POST /password-reset/confirm aufruft
     // Der Token wird in einem hidden input mitgeschickt
-    const html = `<!DOCTYPE html>
+  const html = `<!DOCTYPE html>
 <html lang="de">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Passwort zurücksetzen – Signly</title>
   <style>
-    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:#f4fbff; margin:0; padding:0; }
-    .page { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:16px; }
-    .card { background:#ffffff; border-radius:16px; max-width:440px; width:100%; padding:24px 22px 22px; box-shadow:0 12px 30px rgba(15,23,42,0.18); }
-    h1 { margin:0 0 12px; font-size:22px; color:#0f172a; text-align:center; }
-    p { margin:0 0 14px; font-size:14px; color:#475569; text-align:center; }
+  body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:#f4fbff; margin:0; padding:0; color:#0f172a; }
+  .page { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px 12px; }
+  .card { background:#ffffff; border-radius:22px; max-width:520px; width:100%; padding:20px 24px 24px; box-shadow:0 14px 34px rgba(11,33,53,0.10); box-sizing:border-box; }
+  .brand { text-align:center; margin-bottom:6px; }
+  .brand img { max-width:230px; height:auto; display:block; margin:0 auto; }
+  .hero { margin:6px 0 18px; }
+  .hero-inner { background:#e9fbff; border-radius:16px; padding:12px; text-align:center; }
+  .hero-inner img { max-width:180px; height:auto; display:block; margin:0 auto; }
+  h1 { margin:0 0 10px; font-size:22px; color:#0b2135; text-align:center; }
+  p { margin:0 0 14px; font-size:14px; color:#3b4a5a; text-align:center; }
     .user-line { font-size:13px; color:#0f172a; margin-bottom:14px; text-align:center; }
-    .rules { font-size:12px; color:#64748b; margin:0 0 14px; text-align:left; }
+  .rules { font-size:12px; color:#64748b; margin:0 0 14px; text-align:left; padding-left:18px; }
     label { display:block; margin-bottom:6px; font-size:13px; color:#0f172a; font-weight:500; }
-    .field { position:relative; margin-bottom:10px; }
-    input[type="password"] { width:100%; padding:10px 34px 10px 11px; border-radius:10px; border:1px solid #cbd5f5; font-size:14px; box-sizing:border-box; }
-    input[type="password"]:focus { outline:none; border-color:#1e40af; box-shadow:0 0 0 1px rgba(37,99,235,0.25); }
-    .toggle-eye { position:absolute; right:9px; top:50%; transform:translateY(-50%); border:none; background:transparent; cursor:pointer; padding:4px; color:#64748b; }
+  .field { position:relative; margin-bottom:10px; }
+  input[type="password"] { width:100%; padding:9px 35px 9px 11px; border-radius:10px; border:1px solid #cbd5f5; font-size:14px; box-sizing:border-box; background-color:#ffffff; transition:border-color 0.15s ease, box-shadow 0.15s ease; }
+  input[type="password"]:focus { outline:none; border-color:#1e40af; box-shadow:0 0 0 1px rgba(37,99,235,0.25); }
+  .toggle-eye { position:absolute; right:8px; top:50%; transform:translateY(-50%); border:none; background:transparent; cursor:pointer; padding:0; width:22px; height:22px; display:flex; align-items:center; justify-content:center; color:#64748b; }
+  .toggle-eye svg { width:18px; height:18px; display:block; }
     .toggle-eye:focus { outline:none; }
     .btn { margin-top:16px; width:100%; border:none; border-radius:999px; background:#1e40af; color:#ffffff; font-weight:600; font-size:14px; padding:10px 14px; cursor:pointer; box-shadow:0 10px 22px rgba(30,64,175,0.45); }
     .btn:disabled { opacity:.7; cursor:default; box-shadow:none; }
@@ -118,6 +124,14 @@ export class PasswordResetService {
 <body>
   <div class="page">
     <div class="card">
+      <div class="brand">
+        <img src="https://storage.googleapis.com/signlydaten/schlange/Signly_logo_color_flatt2.png" alt="Signly" />
+      </div>
+      <div class="hero">
+        <div class="hero-inner">
+          <img src="https://storage.googleapis.com/signlydaten/schlange/Maskotchen.png" alt="Signly Maskotchen" />
+        </div>
+      </div>
       <h1>Neues Passwort setzen</h1>
       <p>Bitte gib dein neues Passwort ein. Danach kannst du dich wieder bei Signly anmelden.</p>
       <p class="user-line">Dieses Passwort gilt für deinen Signly-Account.</p>
@@ -132,7 +146,10 @@ export class PasswordResetService {
         <div class="field">
           <input id="password" name="password" type="password" required minlength="8" />
           <button type="button" class="toggle-eye" data-target="password" aria-label="Passwort anzeigen">
-            👁
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path fill="currentColor" d="M12 5C7 5 3.1 8.1 1.5 12c1.6 3.9 5.5 7 10.5 7s8.9-3.1 10.5-7C20.9 8.1 17 5 12 5zm0 11.5A4.5 4.5 0 1 1 12 8.5a4.5 4.5 0 0 1 0 9z"/>
+              <circle cx="12" cy="12" r="2.5" fill="currentColor" />
+            </svg>
           </button>
         </div>
 
@@ -140,7 +157,10 @@ export class PasswordResetService {
         <div class="field">
           <input id="passwordConfirm" name="passwordConfirm" type="password" required minlength="8" />
           <button type="button" class="toggle-eye" data-target="passwordConfirm" aria-label="Passwort anzeigen">
-            👁
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path fill="currentColor" d="M12 5C7 5 3.1 8.1 1.5 12c1.6 3.9 5.5 7 10.5 7s8.9-3.1 10.5-7C20.9 8.1 17 5 12 5zm0 11.5A4.5 4.5 0 1 1 12 8.5a4.5 4.5 0 0 1 0 9z"/>
+              <circle cx="12" cy="12" r="2.5" fill="currentColor" />
+            </svg>
           </button>
         </div>
         <button class="btn" type="submit">Passwort speichern</button>
