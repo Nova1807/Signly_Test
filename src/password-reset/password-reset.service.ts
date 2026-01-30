@@ -54,16 +54,15 @@ export class PasswordResetService {
 
     // Neuen Token erstellen
     const token = require('crypto').randomBytes(32).toString('hex');
-    const createdAt = new Date();
-    const expiresAt = new Date(createdAt.getTime() + 60 * 60 * 1000); // 1h
+  const createdAt = new Date();
+  // Hinweis: Kein Ablauf mehr, Link bleibt gültig, bis er benutzt wurde
 
     await firestore.collection('passwordResets').doc(token).set({
       userId,
       email,
       name,
-      createdAt: admin.firestore.Timestamp.fromDate(createdAt),
-      expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
-      used: false,
+  createdAt: admin.firestore.Timestamp.fromDate(createdAt),
+  used: false,
     });
 
     // Mail versenden
@@ -438,7 +437,8 @@ export class PasswordResetService {
          return;
        }
 
-       if (!/[A-Za-z]/.test(pwd) || !/[0-9]/.test(pwd)) {
+       // Mindestens ein Buchstabe (a-z oder A-Z, inkl. Umlaute) und mindestens eine Ziffer
+       if (!/[A-Za-zÄÖÜäöü]/.test(pwd) || !/[0-9]/.test(pwd)) {
          errorDiv.textContent = 'Das Passwort muss mindestens einen Buchstaben und eine Zahl enthalten.';
          errorDiv.style.display = 'block';
          return;
@@ -500,11 +500,7 @@ export class PasswordResetService {
       throw new BadRequestException('Ungültiger oder abgelaufener Link');
     }
 
-    const now = new Date();
-    const expiresAt = (data.expiresAt as admin.firestore.Timestamp).toDate();
-    if (now > expiresAt) {
-      throw new BadRequestException('Ungültiger oder abgelaufener Link');
-    }
+  // Kein Ablauf mehr: Token ist nur ungültig, wenn es nicht existiert oder bereits benutzt wurde
 
     const userId = data.userId as string;
     const userRef = firestore.collection('users').doc(userId);
