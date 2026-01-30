@@ -219,4 +219,103 @@ export class MailerService {
       throw error;
     }
   }
+
+  async sendPasswordResetEmail(email: string, token: string) {
+    this.logger.log(`sendPasswordResetEmail start: email=${email}`);
+
+    const encodedToken = encodeURIComponent(token);
+
+    const user = process.env.BREVO_SMTP_USER;
+    const pass = process.env.BREVO_SMTP_KEY;
+
+    if (!user || !pass) {
+      this.logger.error(
+        'Missing Brevo SMTP credentials. Set BREVO_SMTP_USER and BREVO_SMTP_KEY.',
+      );
+      throw new Error('Missing Brevo SMTP credentials');
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: 'smtp-relay.brevo.com',
+      port: 587,
+      secure: false,
+      auth: { user, pass },
+      requireTLS: true,
+      pool: true,
+      maxConnections: 1,
+      tls: {
+        rejectUnauthorized: false,
+      },
+    });
+
+    const baseResetUrl = 'https://backend.signly.at/password-reset/form';
+    const resetUrl = `${baseResetUrl}?token=${encodedToken}`;
+    this.logger.log(`sendPasswordResetEmail: reset URL: ${resetUrl}`);
+
+    const subject = 'Passwort zurücksetzen für deinen Signly‑Account';
+
+    const text = [
+      `Hallo,`,
+      ``,
+      `du hast angefragt, dein Passwort bei Signly zurückzusetzen.`,
+      `Wenn du das nicht warst, kannst du diese E-Mail ignorieren.`,
+      ``,
+      `Link zum Zurücksetzen (1 Stunde gültig):`,
+      `${resetUrl}`,
+    ].join('\n');
+
+    const html = `<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Signly – Passwort zurücksetzen</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f4fbff; font-family: Arial, sans-serif; color:#0b2135;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f4fbff; padding:28px 0;">
+    <tr>
+      <td style="text-align:center; padding:0 12px;">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="width:100%; max-width:600px; background:#ffffff; border-radius:22px; overflow:hidden; box-shadow:0 14px 34px rgba(11,33,53,0.10); margin:0 auto;">
+          <tr>
+            <td style="padding:22px 24px 8px; text-align:center; background:#ffffff;">
+              <h1 style="margin:0; font-size:22px; line-height:1.3; color:#0b2135;">Passwort zurücksetzen</h1>
+              <p style="margin:10px 0 0; font-size:14px; line-height:1.6; color:#3b4a5a;">Klicke auf den Button, um ein neues Passwort für deinen Signly‑Account zu setzen. Der Link ist 1 Stunde gültig.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:18px 26px 22px; text-align:center; background:#ffffff;">
+              <a href="${resetUrl}" style="display:inline-block; background:#1e6fb8; color:#ffffff; font-size:15px; font-weight:bold; text-decoration:none; padding:14px 28px; border-radius:14px; box-shadow:0 10px 26px rgba(30,111,184,0.45);">Passwort zurücksetzen</a>
+              <p style="margin:10px 0 0; font-size:12px; color:#64748b;">Falls der Button nicht funktioniert, kopiere diesen Link in deinen Browser:<br /><a href="${resetUrl}" style="color:#1e6fb8; word-break:break-all;">${resetUrl}</a></p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    const mailOptions = {
+      from: `"Signly Support" <support@signly.at>`,
+      replyTo: `"Signly Support" <support@signly.at>`,
+      to: email,
+      subject,
+      text,
+      html,
+    };
+
+    try {
+      const info = await transporter.sendMail(mailOptions);
+      this.logger.log(
+        `sendPasswordResetEmail: mail sent to ${email}, messageId: ${info.messageId}`,
+      );
+      return info;
+    } catch (error) {
+      this.logger.error(
+        `sendPasswordResetEmail ERROR: ${error?.message}`,
+        error?.stack,
+      );
+      throw error;
+    }
+  }
 }

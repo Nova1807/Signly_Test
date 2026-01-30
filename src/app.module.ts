@@ -6,6 +6,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import config from './config/config';
 import { FirebaseModule } from './firebase/firebase.module';
+import { PasswordResetModule } from './password-reset/password-reset.module';
 
 @Module({
   imports: [
@@ -22,8 +23,9 @@ import { FirebaseModule } from './firebase/firebase.module';
       global: true,
       inject: [ConfigService],
     }),
-    FirebaseModule,
-    AuthModule,
+  FirebaseModule,
+  AuthModule,
+  PasswordResetModule,
   ],
   controllers: [AppController],
   providers: [AppService],
