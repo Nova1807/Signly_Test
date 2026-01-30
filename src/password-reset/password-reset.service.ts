@@ -95,81 +95,313 @@ export class PasswordResetService {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Passwort zurücksetzen – Signly</title>
   <style>
-  body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:#f4fbff; margin:0; padding:0; color:#0f172a; }
-  .page { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px 12px; }
-  .card { background:#ffffff; border-radius:22px; max-width:520px; width:100%; padding:20px 24px 24px; box-shadow:0 14px 34px rgba(11,33,53,0.10); box-sizing:border-box; }
-  .brand { text-align:center; margin-bottom:6px; }
-  .brand img { max-width:230px; height:auto; display:block; margin:0 auto; }
-  .hero { margin:6px 0 18px; }
-  .hero-inner { background:#e9fbff; border-radius:16px; padding:12px; text-align:center; }
-  .hero-inner img { max-width:180px; height:auto; display:block; margin:0 auto; }
-  h1 { margin:0 0 10px; font-size:22px; color:#0b2135; text-align:center; }
-  p { margin:0 0 14px; font-size:14px; color:#3b4a5a; text-align:center; }
-    .user-line { font-size:13px; color:#0f172a; margin-bottom:14px; text-align:center; }
-  .rules { font-size:12px; color:#64748b; margin:0 0 14px; text-align:left; padding-left:18px; }
-    label { display:block; margin-bottom:6px; font-size:13px; color:#0f172a; font-weight:500; }
-  .field { position:relative; margin-bottom:10px; }
-  input[type="password"] { width:100%; padding:9px 35px 9px 11px; border-radius:10px; border:1px solid #cbd5f5; font-size:14px; box-sizing:border-box; background-color:#ffffff; transition:border-color 0.15s ease, box-shadow 0.15s ease; }
-  input[type="password"]:focus { outline:none; border-color:#1e40af; box-shadow:0 0 0 1px rgba(37,99,235,0.25); }
-  .toggle-eye { position:absolute; right:8px; top:50%; transform:translateY(-50%); border:none; background:transparent; cursor:pointer; padding:0; width:22px; height:22px; display:flex; align-items:center; justify-content:center; color:#64748b; }
-  .toggle-eye svg { width:18px; height:18px; display:block; }
-    .toggle-eye:focus { outline:none; }
-    .btn { margin-top:16px; width:100%; border:none; border-radius:999px; background:#1e40af; color:#ffffff; font-weight:600; font-size:14px; padding:10px 14px; cursor:pointer; box-shadow:0 10px 22px rgba(30,64,175,0.45); }
-    .btn:disabled { opacity:.7; cursor:default; box-shadow:none; }
-    .hint { margin-top:10px; font-size:12px; color:#94a3b8; text-align:center; }
-    .error { margin-top:10px; font-size:13px; color:#b91c1c; text-align:center; display:none; }
-    .success { margin-top:10px; font-size:13px; color:#15803d; text-align:center; display:none; }
+    :root {
+      --bg-page: #f4fbff;
+      --bg-card: #ffffff;
+      --primary: #073b4c;
+      --accent: #a6f9fd;
+      --accent-border: #3b82c4;
+      --text-main: #0b2135;
+      --text-muted: #4a5568;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    body {
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      background: radial-gradient(circle at top left, #e0f7ff 0, #f4fbff 45%, #ffffff 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      color: var(--text-main);
+    }
+
+    .card {
+      width: 100%;
+      max-width: 520px;
+      background: var(--bg-card);
+      border-radius: 20px;
+      box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+      padding: 28px 24px 24px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at top right, rgba(166,249,253,0.55), transparent 60%);
+      opacity: 0.85;
+      pointer-events: none;
+    }
+
+    .card-inner {
+      position: relative;
+      z-index: 1;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .logo img {
+      display: block;
+      height: 36px;
+      width: auto;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .pill {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(15,23,42,0.08);
+      background: rgba(255,255,255,0.8);
+      color: var(--text-muted);
+    }
+
+    .app-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      border: 1px solid rgba(59,130,196,0.35);
+      box-shadow: 0 8px 18px rgba(15,23,42,0.18);
+      background: #ffffff;
+      display: block;
+    }
+
+    .hero {
+      margin-top: 8px;
+    }
+
+    h1 {
+      margin: 4px 0 10px;
+      font-size: 22px;
+      color: var(--primary);
+      text-align: left;
+    }
+
+    p {
+      margin: 0 0 10px;
+      font-size: 14px;
+      color: var(--text-muted);
+      text-align: left;
+    }
+
+    .user-line {
+      font-size: 13px;
+      color: var(--text-main);
+      margin-bottom: 10px;
+    }
+
+    .rules {
+      font-size: 12px;
+      color: #64748b;
+      margin: 0 0 14px;
+      padding-left: 18px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      color: var(--text-main);
+      font-weight: 500;
+    }
+
+    .field {
+      position: relative;
+      margin-bottom: 10px;
+    }
+
+    .password-input {
+      width: 100%;
+      padding: 9px 35px 9px 11px;
+      border-radius: 10px;
+      border: 1px solid #cbd5f5;
+      font-size: 14px;
+      box-sizing: border-box;
+      background-color: #ffffff;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .password-input:focus {
+      outline: none;
+      border-color: #1e40af;
+      box-shadow: 0 0 0 1px rgba(37,99,235,0.25);
+    }
+
+    .toggle-eye {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      padding: 0;
+      width: 22px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #64748b;
+    }
+
+    .toggle-eye svg {
+      width: 18px;
+      height: 18px;
+      display: block;
+    }
+
+    .toggle-eye:focus {
+      outline: none;
+    }
+
+    .btn {
+      margin-top: 16px;
+      width: 100%;
+      border: none;
+      border-radius: 999px;
+      background: #1e40af;
+      color: #ffffff;
+      font-weight: 600;
+      font-size: 14px;
+      padding: 10px 14px;
+      cursor: pointer;
+      box-shadow: 0 10px 22px rgba(30,64,175,0.45);
+    }
+
+    .btn:disabled {
+      opacity: .7;
+      cursor: default;
+      box-shadow: none;
+    }
+
+    .hint {
+      margin-top: 10px;
+      font-size: 12px;
+      color: #94a3b8;
+      text-align: left;
+    }
+
+    .error {
+      margin-top: 10px;
+      font-size: 13px;
+      color: #b91c1c;
+      text-align: left;
+      display: none;
+    }
+
+    .success {
+      margin-top: 10px;
+      font-size: 13px;
+      color: #15803d;
+      text-align: left;
+      display: none;
+    }
+
+    @media (max-width: 520px) {
+      body {
+        padding: 16px;
+      }
+
+      .card {
+        padding: 22px 18px 18px;
+      }
+    }
   </style>
 </head>
 <body>
-  <div class="page">
-    <div class="card">
-      <div class="brand">
-        <img src="https://storage.googleapis.com/signlydaten/schlange/Signly_logo_color_flatt2.png" alt="Signly" />
-      </div>
-      <div class="hero">
-        <div class="hero-inner">
-          <img src="https://storage.googleapis.com/signlydaten/schlange/Maskotchen.png" alt="Signly Maskotchen" />
+  <main class="card" role="main" aria-label="Passwort für deinen Signly-Account zurücksetzen">
+    <div class="card-inner">
+      <header class="card-header">
+        <div class="logo">
+          <img
+            src="https://storage.googleapis.com/signlydaten/schlange/Signly_logo_color_flatt2.png"
+            alt="Signly Logo"
+            style="height: 36px; width: auto;"
+            loading="eager"
+          />
         </div>
-      </div>
-      <h1>Neues Passwort setzen</h1>
-      <p>Bitte gib dein neues Passwort ein. Danach kannst du dich wieder bei Signly anmelden.</p>
-      <p class="user-line">Dieses Passwort gilt für deinen Signly-Account.</p>
-      <ul class="rules">
-        <li>Mindestens 8 Zeichen</li>
-        <li>Mindestens 1 Buchstabe</li>
-        <li>Mindestens 1 Zahl</li>
-      </ul>
-      <form id="resetForm">
-        <input type="hidden" name="token" value="${token}" />
-        <label for="password">Neues Passwort</label>
-        <div class="field">
-          <input id="password" name="password" type="password" required minlength="8" />
-          <button type="button" class="toggle-eye" data-target="password" aria-label="Passwort anzeigen">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path fill="currentColor" d="M12 5C7 5 3.1 8.1 1.5 12c1.6 3.9 5.5 7 10.5 7s8.9-3.1 10.5-7C20.9 8.1 17 5 12 5zm0 11.5A4.5 4.5 0 1 1 12 8.5a4.5 4.5 0 0 1 0 9z"/>
-              <circle cx="12" cy="12" r="2.5" fill="currentColor" />
-            </svg>
-          </button>
+        <div class="header-right">
+          <div class="pill">Passwort zurücksetzen</div>
+          <img
+            src="https://storage.googleapis.com/signlydaten/schlange/signly_App_Icon.png"
+            alt="Signly App Icon"
+            class="app-icon"
+            loading="eager"
+          />
         </div>
+      </header>
 
-        <label for="passwordConfirm">Neues Passwort bestätigen</label>
-        <div class="field">
-          <input id="passwordConfirm" name="passwordConfirm" type="password" required minlength="8" />
-          <button type="button" class="toggle-eye" data-target="passwordConfirm" aria-label="Passwort anzeigen">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path fill="currentColor" d="M12 5C7 5 3.1 8.1 1.5 12c1.6 3.9 5.5 7 10.5 7s8.9-3.1 10.5-7C20.9 8.1 17 5 12 5zm0 11.5A4.5 4.5 0 1 1 12 8.5a4.5 4.5 0 0 1 0 9z"/>
-              <circle cx="12" cy="12" r="2.5" fill="currentColor" />
-            </svg>
-          </button>
-        </div>
-        <button class="btn" type="submit">Passwort speichern</button>
-        <div id="error" class="error">Etwas ist schiefgelaufen. Bitte versuche es erneut.</div>
-        <div id="success" class="success">Dein Passwort wurde gespeichert. Du kannst dieses Fenster schließen.</div>
-        <div class="hint">Wenn der Link abgelaufen ist, fordere bitte ein neues Passwort an.</div>
-      </form>
+      <section class="hero">
+        <h1>Neues Passwort setzen</h1>
+        <p>Bitte gib dein neues Passwort ein. Danach kannst du dich wieder bei Signly anmelden.</p>
+        <p class="user-line">Dieses Passwort gilt für deinen Signly-Account.</p>
+        <ul class="rules">
+          <li>Mindestens 8 Zeichen</li>
+          <li>Mindestens 1 Buchstabe</li>
+          <li>Mindestens 1 Zahl</li>
+        </ul>
+        <form id="resetForm">
+          <input type="hidden" name="token" value="${token}" />
+          <label for="password">Neues Passwort</label>
+          <div class="field">
+            <input id="password" name="password" class="password-input" type="password" required minlength="8" />
+            <button type="button" class="toggle-eye" data-target="password" aria-label="Passwort anzeigen">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M12 5C7 5 3.1 8.1 1.5 12c1.6 3.9 5.5 7 10.5 7s8.9-3.1 10.5-7C20.9 8.1 17 5 12 5zm0 11.5A4.5 4.5 0 1 1 12 8.5a4.5 4.5 0 0 1 0 9z"/>
+                <circle cx="12" cy="12" r="2.5" fill="currentColor" />
+              </svg>
+            </button>
+          </div>
+
+          <label for="passwordConfirm">Neues Passwort bestätigen</label>
+          <div class="field">
+            <input id="passwordConfirm" name="passwordConfirm" class="password-input" type="password" required minlength="8" />
+            <button type="button" class="toggle-eye" data-target="passwordConfirm" aria-label="Passwort anzeigen">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M12 5C7 5 3.1 8.1 1.5 12c1.6 3.9 5.5 7 10.5 7s8.9-3.1 10.5-7C20.9 8.1 17 5 12 5zm0 11.5A4.5 4.5 0 1 1 12 8.5a4.5 4.5 0 0 1 0 9z"/>
+                <circle cx="12" cy="12" r="2.5" fill="currentColor" />
+              </svg>
+            </button>
+          </div>
+          <button class="btn" type="submit">Passwort speichern</button>
+          <div id="error" class="error">Etwas ist schiefgelaufen. Bitte versuche es erneut.</div>
+          <div id="success" class="success">Dein Passwort wurde gespeichert. Du kannst dieses Fenster schließen.</div>
+          <div class="hint">Wenn der Link abgelaufen ist, fordere bitte ein neues Passwort an.</div>
+        </form>
+      </section>
     </div>
-  </div>
+  </main>
   <script>
     const form = document.getElementById('resetForm');
     const errorDiv = document.getElementById('error');
@@ -289,6 +521,33 @@ export class PasswordResetService {
     // Token als verwendet markieren (oder löschen)
     await docRef.update({ used: true });
 
-    return { success: true, message: 'Passwort erfolgreich geändert.' };
+    // HTML-Erfolgseite zurückgeben, damit der User eine schöne Bestätigung sieht
+    const successHtml = `<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Passwort gespeichert – Signly</title>
+  <style>
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:#f4fbff; margin:0; padding:0; color:#0f172a; }
+    .page { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px 12px; }
+    .card { background:#ffffff; border-radius:22px; max-width:420px; width:100%; padding:22px 24px 24px; box-shadow:0 14px 34px rgba(11,33,53,0.10); box-sizing:border-box; text-align:center; }
+    h1 { margin:0 0 10px; font-size:22px; color:#0b2135; }
+    p { margin:0 0 10px; font-size:14px; color:#3b4a5a; }
+    .ok { margin-top:14px; font-size:13px; color:#15803d; font-weight:500; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="card">
+      <h1>Passwort gespeichert</h1>
+      <p>Dein neues Passwort wurde erfolgreich gespeichert.</p>
+      <p class="ok">Du kannst dieses Fenster jetzt schließen und dich in der App mit deinem neuen Passwort anmelden.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    return successHtml;
   }
 }
