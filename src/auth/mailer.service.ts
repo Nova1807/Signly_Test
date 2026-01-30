@@ -252,6 +252,12 @@ export class MailerService {
     const resetUrl = `${baseResetUrl}?token=${encodedToken}`;
     this.logger.log(`sendPasswordResetEmail: reset URL: ${resetUrl}`);
 
+    // Gleiche Bild-Assets wie in der Verifizierungs-Mail
+    const logoUrl =
+      'https://storage.googleapis.com/signlydaten/schlange/Signly_logo_color_flatt2.png';
+    const mascotUrl =
+      'https://storage.googleapis.com/signlydaten/schlange/Maskotchen.png';
+
     const subject = 'Passwort zurücksetzen für deinen Signly‑Account';
 
     const text = [
@@ -269,25 +275,114 @@ export class MailerService {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="x-apple-disable-message-reformatting" />
   <title>Signly – Passwort zurücksetzen</title>
 </head>
+
 <body style="margin:0; padding:0; background-color:#f4fbff; font-family: Arial, sans-serif; color:#0b2135;">
+  <div style="display:none; font-size:1px; line-height:1px; max-height:0; max-width:0; opacity:0; overflow:hidden;">
+    Setze dein Passwort für deinen Signly-Account zurück. Link 1 Stunde gültig.
+  </div>
+
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f4fbff; padding:28px 0;">
     <tr>
       <td style="text-align:center; padding:0 12px;">
-        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="width:100%; max-width:600px; background:#ffffff; border-radius:22px; overflow:hidden; box-shadow:0 14px 34px rgba(11,33,53,0.10); margin:0 auto;">
+
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0"
+               style="width:100%; max-width:600px; background:#ffffff; border-radius:22px; overflow:hidden; box-shadow:0 14px 34px rgba(11,33,53,0.10); margin:0 auto;">
+
+          <!-- Brand header -->
           <tr>
-            <td style="padding:22px 24px 8px; text-align:center; background:#ffffff;">
-              <h1 style="margin:0; font-size:22px; line-height:1.3; color:#0b2135;">Passwort zurücksetzen</h1>
-              <p style="margin:10px 0 0; font-size:14px; line-height:1.6; color:#3b4a5a;">Klicke auf den Button, um ein neues Passwort für deinen Signly‑Account zu setzen. Der Link ist 1 Stunde gültig.</p>
+            <td style="padding:24px 22px 6px; text-align:center; background:#ffffff;">
+              <img
+                src="${logoUrl}"
+                alt="Signly"
+                width="240"
+                style="display:block; height:auto; margin:0 auto;"
+              />
             </td>
           </tr>
+
+          <!-- Mascot hero -->
           <tr>
-            <td style="padding:18px 26px 22px; text-align:center; background:#ffffff;">
-              <a href="${resetUrl}" style="display:inline-block; background:#1e6fb8; color:#ffffff; font-size:15px; font-weight:bold; text-decoration:none; padding:14px 28px; border-radius:14px; box-shadow:0 10px 26px rgba(30,111,184,0.45);">Passwort zurücksetzen</a>
-              <p style="margin:10px 0 0; font-size:12px; color:#64748b;">Falls der Button nicht funktioniert, kopiere diesen Link in deinen Browser:<br /><a href="${resetUrl}" style="color:#1e6fb8; word-break:break-all;">${resetUrl}</a></p>
+            <td style="padding:14px 22px 0; text-align:center; background:#ffffff;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+                     style="background:#e9fbff; border-radius:16px; overflow:hidden;">
+                <tr>
+                  <td style="padding:16px 14px; text-align:center;">
+                    <img
+                      src="${mascotUrl}"
+                      alt="Signly Maskotchen"
+                      width="200"
+                      style="display:block; height:auto; margin:0 auto;"
+                    />
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
+
+          <!-- Copy -->
+          <tr>
+            <td style="padding:16px 26px 0; text-align:center; background:#ffffff;">
+              <h1 style="margin:0; font-size:22px; line-height:1.25; color:#0b2135;">
+                Passwort zurücksetzen
+              </h1>
+              <p style="margin:10px 0 0; font-size:14px; line-height:1.65; color:#3b4a5a;">
+                Du kannst hier ein neues Passwort für deinen Signly-Account festlegen.
+                Der Link ist <strong>1 Stunde</strong> gültig.
+              </p>
+            </td>
+          </tr>
+
+          <!-- CTA -->
+          <tr>
+            <td style="padding:18px 26px 0; text-align:center; background:#ffffff;">
+              <a href="${resetUrl}"
+                 style="display:inline-block; background:#1e6fb8; color:#ffffff;
+                        font-size:15px; font-weight:bold; text-decoration:none;
+                        padding:14px 28px; border-radius:14px;
+                        box-shadow:0 10px 26px rgba(30,111,184,0.45);">
+                Passwort zurücksetzen
+              </a>
+              <p style="margin:10px 0 0; font-size:12px; color:#64748b;">
+                Falls der Button nicht funktioniert, kopiere diesen Link in deinen Browser:<br />
+                <a href="${resetUrl}" style="color:#1e6fb8; word-break:break-all;">${resetUrl}</a>
+              </p>
+            </td>
+          </tr>
+
+          <!-- Safety note -->
+          <tr>
+            <td style="padding:14px 26px 22px; text-align:center; background:#ffffff;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+                     style="background:#e9fbff; border-radius:12px;">
+                <tr>
+                  <td style="padding:12px 12px; text-align:center;">
+                    <p style="margin:0; font-size:12px; line-height:1.6; color:#64748b;">
+                      Wenn du dein Passwort nicht zurücksetzen wolltest, kannst du diese E-Mail ignorieren.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="border-top:1px solid #e8f1f8; padding:14px 26px 18px; text-align:center; background:#ffffff;">
+              <p style="margin:0; font-size:11px; color:#94a3b8;">
+                Support:
+                <a href="mailto:support@signly.at" style="color:#1e6fb8; text-decoration:underline;">
+                  support@signly.at
+                </a>
+              </p>
+              <p style="margin:6px 0 0; font-size:11px; color:#94a3b8;">
+                © ${new Date().getFullYear()} Signly. Alle Rechte vorbehalten.
+              </p>
+            </td>
+          </tr>
+
         </table>
       </td>
     </tr>

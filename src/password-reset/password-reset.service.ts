@@ -38,7 +38,9 @@ export class PasswordResetService {
     }
 
     const userDoc = userQuery.docs[0];
-    const userId = userDoc.id;
+  const userId = userDoc.id;
+  const userData = userDoc.data() as any;
+  const name = (userData && (userData.name || userData.displayName)) || '';
 
     // Alte Tokens des Users entfernen
     const oldTokensSnapshot = await firestore
@@ -58,6 +60,7 @@ export class PasswordResetService {
     await firestore.collection('passwordResets').doc(token).set({
       userId,
       email,
+      name,
       createdAt: admin.firestore.Timestamp.fromDate(createdAt),
       expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
       used: false,
@@ -79,7 +82,11 @@ export class PasswordResetService {
       throw new BadRequestException('Token fehlt');
     }
 
-    // Einfaches HTML-Formular, das POST /password-reset/confirm aufruft
+  // Hinweis: Da diese Methode synchron ist, können wir hier nicht direkt Firestore abfragen.
+  // Stattdessen wird der Name bereits im Token-Dokument gespeichert und später clientseitig angezeigt,
+  // falls du ihn per separatem Endpoint nachladen möchtest.
+
+  // Einfaches HTML-Formular, das POST /password-reset/confirm aufruft
     // Der Token wird in einem hidden input mitgeschickt
     const html = `<!DOCTYPE html>
 <html lang="de">
@@ -90,17 +97,22 @@ export class PasswordResetService {
   <style>
     body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:#f4fbff; margin:0; padding:0; }
     .page { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:16px; }
-    .card { background:#ffffff; border-radius:16px; max-width:420px; width:100%; padding:24px 22px 20px; box-shadow:0 12px 30px rgba(15,23,42,0.18); }
+    .card { background:#ffffff; border-radius:16px; max-width:440px; width:100%; padding:24px 22px 22px; box-shadow:0 12px 30px rgba(15,23,42,0.18); }
     h1 { margin:0 0 12px; font-size:22px; color:#0f172a; text-align:center; }
-    p { margin:0 0 18px; font-size:14px; color:#475569; text-align:center; }
+    p { margin:0 0 14px; font-size:14px; color:#475569; text-align:center; }
+    .user-line { font-size:13px; color:#0f172a; margin-bottom:14px; text-align:center; }
+    .rules { font-size:12px; color:#64748b; margin:0 0 14px; text-align:left; }
     label { display:block; margin-bottom:6px; font-size:13px; color:#0f172a; font-weight:500; }
-    input[type="password"] { width:100%; padding:10px 11px; border-radius:10px; border:1px solid #cbd5f5; font-size:14px; box-sizing:border-box; }
+    .field { position:relative; margin-bottom:10px; }
+    input[type="password"] { width:100%; padding:10px 34px 10px 11px; border-radius:10px; border:1px solid #cbd5f5; font-size:14px; box-sizing:border-box; }
     input[type="password"]:focus { outline:none; border-color:#1e40af; box-shadow:0 0 0 1px rgba(37,99,235,0.25); }
+    .toggle-eye { position:absolute; right:9px; top:50%; transform:translateY(-50%); border:none; background:transparent; cursor:pointer; padding:4px; color:#64748b; }
+    .toggle-eye:focus { outline:none; }
     .btn { margin-top:16px; width:100%; border:none; border-radius:999px; background:#1e40af; color:#ffffff; font-weight:600; font-size:14px; padding:10px 14px; cursor:pointer; box-shadow:0 10px 22px rgba(30,64,175,0.45); }
     .btn:disabled { opacity:.7; cursor:default; box-shadow:none; }
-    .hint { margin-top:12px; font-size:12px; color:#94a3b8; text-align:center; }
-    .error { margin-top:12px; font-size:13px; color:#b91c1c; text-align:center; display:none; }
-    .success { margin-top:12px; font-size:13px; color:#15803d; text-align:center; display:none; }
+    .hint { margin-top:10px; font-size:12px; color:#94a3b8; text-align:center; }
+    .error { margin-top:10px; font-size:13px; color:#b91c1c; text-align:center; display:none; }
+    .success { margin-top:10px; font-size:13px; color:#15803d; text-align:center; display:none; }
   </style>
 </head>
 <body>
@@ -108,10 +120,29 @@ export class PasswordResetService {
     <div class="card">
       <h1>Neues Passwort setzen</h1>
       <p>Bitte gib dein neues Passwort ein. Danach kannst du dich wieder bei Signly anmelden.</p>
+      <p class="user-line">Dieses Passwort gilt für deinen Signly-Account.</p>
+      <ul class="rules">
+        <li>Mindestens 8 Zeichen</li>
+        <li>Mindestens 1 Buchstabe</li>
+        <li>Mindestens 1 Zahl</li>
+      </ul>
       <form id="resetForm">
         <input type="hidden" name="token" value="${token}" />
         <label for="password">Neues Passwort</label>
-        <input id="password" name="password" type="password" required minlength="6" />
+        <div class="field">
+          <input id="password" name="password" type="password" required minlength="8" />
+          <button type="button" class="toggle-eye" data-target="password" aria-label="Passwort anzeigen">
+            👁
+          </button>
+        </div>
+
+        <label for="passwordConfirm">Neues Passwort bestätigen</label>
+        <div class="field">
+          <input id="passwordConfirm" name="passwordConfirm" type="password" required minlength="8" />
+          <button type="button" class="toggle-eye" data-target="passwordConfirm" aria-label="Passwort anzeigen">
+            👁
+          </button>
+        </div>
         <button class="btn" type="submit">Passwort speichern</button>
         <div id="error" class="error">Etwas ist schiefgelaufen. Bitte versuche es erneut.</div>
         <div id="success" class="success">Dein Passwort wurde gespeichert. Du kannst dieses Fenster schließen.</div>
@@ -123,14 +154,54 @@ export class PasswordResetService {
     const form = document.getElementById('resetForm');
     const errorDiv = document.getElementById('error');
     const successDiv = document.getElementById('success');
+    const passwordInput = document.getElementById('password');
+    const passwordConfirmInput = document.getElementById('passwordConfirm');
+
+    function toggleVisibility(targetId) {
+      const input = document.getElementById(targetId);
+      if (!input) return;
+      const type = input.getAttribute('type') === 'password' ? 'text' : 'password';
+      input.setAttribute('type', type);
+    }
+
+    document.querySelectorAll('.toggle-eye').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const target = btn.getAttribute('data-target');
+        toggleVisibility(target);
+      });
+    });
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       errorDiv.style.display = 'none';
       successDiv.style.display = 'none';
+
+       const pwd = passwordInput.value || '';
+       const pwd2 = passwordConfirmInput.value || '';
+
+       // einfache Client-Validierung
+       if (pwd.length < 8) {
+         errorDiv.textContent = 'Das Passwort muss mindestens 8 Zeichen lang sein.';
+         errorDiv.style.display = 'block';
+         return;
+       }
+
+       if (!/[A-Za-z]/.test(pwd) || !/[0-9]/.test(pwd)) {
+         errorDiv.textContent = 'Das Passwort muss mindestens einen Buchstaben und eine Zahl enthalten.';
+         errorDiv.style.display = 'block';
+         return;
+       }
+
+       if (pwd !== pwd2) {
+         errorDiv.textContent = 'Die Passwörter stimmen nicht überein.';
+         errorDiv.style.display = 'block';
+         return;
+       }
+
       const formData = new FormData(form);
       const payload = {
         token: formData.get('token'),
-        password: formData.get('password'),
+        password: pwd,
       };
       try {
         const res = await fetch('/password-reset/confirm', {
