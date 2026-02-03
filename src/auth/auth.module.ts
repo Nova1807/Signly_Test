@@ -7,10 +7,10 @@ import { PassportModule } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { FirebaseModule } from '../firebase/firebase.module';
-import { EmailAssetsController } from './email-assets.controller';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
-import { GlbService } from './glb.service';
+import { AppleStrategy } from './strategies/apple.strategy';
+import { AppleAuthGuard } from './guards/apple-auth.guard';
 import { MailerService } from './mailer.service';
 
 @Module({
@@ -22,7 +22,14 @@ import { MailerService } from './mailer.service';
       signOptions: { expiresIn: '1h' },
     }),
   ],
-  controllers: [AuthController, EmailAssetsController],
-  providers: [AuthService, GoogleStrategy, GoogleAuthGuard, GlbService, MailerService],
+  controllers: [AuthController],
+  providers: [
+    AuthService,
+    GoogleStrategy,
+    GoogleAuthGuard,
+    AppleStrategy,
+    AppleAuthGuard,
+    MailerService,
+  ],
 })
 export class AuthModule {}
