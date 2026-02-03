@@ -92,7 +92,7 @@ export class MailerService {
               <img
                 src="${logoUrl}"
                 alt="Signly"
-                width="240"
+                width="190"
                 style="display:block; height:auto; margin:0 auto;"
               />
             </td>
@@ -108,7 +108,7 @@ export class MailerService {
                     <img
                       src="${mascotUrl}"
                       alt="Signly Maskotchen"
-                      width="240"
+                      width="280"
                       style="display:block; height:auto; margin:0 auto;"
                     />
                   </td>
@@ -256,7 +256,7 @@ export class MailerService {
     const logoUrl =
       'https://storage.googleapis.com/signlydaten/schlange/Signly_logo_color_flatt2.png';
     const mascotUrl =
-      'https://storage.googleapis.com/signlydaten/schlange/Maskotchen.png';
+      'https://storage.googleapis.com/signlydaten/schlange/verwirrt_schlange.png';
 
     const subject = 'Passwort zurücksetzen für deinen Signly‑Account';
 
