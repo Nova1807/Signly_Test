@@ -297,7 +297,7 @@ export class MailerService {
               <img
                 src="${logoUrl}"
                 alt="Signly"
-                width="240"
+                width="190"
                 style="display:block; height:auto; margin:0 auto;"
               />
             </td>
@@ -313,7 +313,7 @@ export class MailerService {
                     <img
                       src="${mascotUrl}"
                       alt="Signly Maskotchen"
-                      width="200"
+                      width="280"
                       style="display:block; height:auto; margin:0 auto;"
                     />
                   </td>
