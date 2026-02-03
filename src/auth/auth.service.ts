@@ -603,6 +603,118 @@ export class AuthService {
     };
   }
 
+  // Apple-Login mit Login-Streak
+  async loginWithApple(appleUser: {
+    email: string;
+    name: string;
+    appleId: string;
+  }) {
+    this.logger.log(
+      `loginWithApple start: email=${appleUser.email}, appleId=${appleUser.appleId}`,
+    );
+
+    if (!appleUser.email) {
+      this.logger.warn('loginWithApple: missing email from Apple profile');
+      throw new BadRequestException('Apple account has no email');
+    }
+
+    const firestore = this.firebaseApp.firestore();
+    this.logger.log('loginWithApple: got firestore instance');
+
+    const now = new Date();
+    let userId: string | null = null;
+    let loginStreak = 0;
+    let longestLoginStreak = 0;
+
+    const appleIdQuery = await firestore
+      .collection('users')
+      .where('appleId', '==', appleUser.appleId)
+      .get();
+
+    if (!appleIdQuery.empty) {
+      const userDoc = appleIdQuery.docs[0];
+      const user = userDoc.data() as any;
+      userId = userDoc.id;
+
+      const streakData = this.updateLoginStreak(user, now);
+
+      await userDoc.ref.update({
+        ...streakData,
+      });
+
+      loginStreak = streakData.loginStreak;
+      longestLoginStreak = streakData.longestLoginStreak;
+
+      this.logger.log(
+        `loginWithApple: found user by appleId=${appleUser.appleId}, userId=${userId}`,
+      );
+    } else {
+      const emailQuery = await firestore
+        .collection('users')
+        .where('email', '==', appleUser.email)
+        .get();
+
+      if (!emailQuery.empty) {
+        const userDoc = emailQuery.docs[0];
+        const user = userDoc.data() as any;
+        userId = userDoc.id;
+
+        const streakData = this.updateLoginStreak(user, now);
+
+        await userDoc.ref.update({
+          appleId: appleUser.appleId,
+          ...streakData,
+        });
+
+        loginStreak = streakData.loginStreak;
+        longestLoginStreak = streakData.longestLoginStreak;
+
+        this.logger.log(
+          `loginWithApple: found existing user by email=${appleUser.email}, userId=${userId}`,
+        );
+      } else {
+        const streakData = this.updateLoginStreak(
+          { lastLoginDate: null, loginStreak: 0, longestLoginStreak: 0 },
+          now,
+        );
+
+        this.logger.log(
+          `loginWithApple: creating new user for email=${appleUser.email}`,
+        );
+
+        const newUserRef = await firestore.collection('users').add({
+          email: appleUser.email,
+          name: appleUser.name || appleUser.email,
+          appleId: appleUser.appleId,
+          emailVerified: true,
+          password: null,
+          createdAt: admin.firestore.Timestamp.fromDate(now),
+          aboutMe: '',
+          ...streakData,
+        });
+
+        userId = newUserRef.id;
+        loginStreak = streakData.loginStreak;
+        longestLoginStreak = streakData.longestLoginStreak;
+
+        this.logger.log(`loginWithApple: new user created with ID=${userId}`);
+      }
+    }
+
+    if (!userId) {
+      this.logger.error('loginWithApple: failed to resolve userId');
+      throw new UnauthorizedException();
+    }
+
+    const tokens = await this.generateUserToken(userId);
+    this.logger.log('loginWithApple: tokens generated');
+    return {
+      ...tokens,
+      loginStreak,
+      longestLoginStreak,
+    };
+  }
+
   // Profil aktualisieren (Name + AboutMe)
   async updateProfile(userId: string, dto: UpdateProfileDto) {
     this.logger.log(

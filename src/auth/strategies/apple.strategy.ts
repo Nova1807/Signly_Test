@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
-import AppleStrategyLib from 'passport-apple';
+import { Strategy as AppleStrategyLib } from 'passport-apple';
 
 @Injectable()
 export class AppleStrategy extends PassportStrategy(AppleStrategyLib, 'apple') {
@@ -30,18 +30,19 @@ export class AppleStrategy extends PassportStrategy(AppleStrategyLib, 'apple') {
   async validate(
     accessToken: string,
     refreshToken: string,
+    idToken: any,
     profile: any,
     done: (error: any, user?: any) => void,
   ): Promise<any> {
     try {
-      const email = profile.email || '';
+      const email = profile?.email || '';
       const name =
-        (profile.name &&
+        (profile?.name &&
           [profile.name.firstName, profile.name.lastName]
             .filter(Boolean)
             .join(' ')) ||
         '';
-      const appleId = profile.id;
+      const appleId = profile?.id;
 
       this.logger.log(
         `Apple validate called: email=${email}, name=${name}, appleId=${appleId}`,
