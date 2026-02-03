@@ -47,7 +47,7 @@ export class MailerService {
     const appIconUrl =
       'https://storage.googleapis.com/signlydaten/schlange/signly_App_Icon.png';
     const mascotUrl =
-      'https://storage.googleapis.com/signlydaten/schlange/Maskotchen.png';
+      'https://storage.googleapis.com/signlydaten/schlange/Schlange_mail.png';
 
     const subject = 'Bestätige deine E-Mail-Adresse für Signly';
 
@@ -102,7 +102,7 @@ export class MailerService {
           <tr>
             <td style="padding:14px 22px 0; text-align:center; background:#ffffff;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
-                     style="background:#e9fbff; border-radius:16px; overflow:hidden;">
+                     style="border-radius:16px; overflow:hidden;">
                 <tr>
                   <td style="padding:16px 14px; text-align:center;">
                     <img
@@ -307,7 +307,7 @@ export class MailerService {
           <tr>
             <td style="padding:14px 22px 0; text-align:center; background:#ffffff;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
-                     style="background:#e9fbff; border-radius:16px; overflow:hidden;">
+                     style="border-radius:16px; overflow:hidden;">
                 <tr>
                   <td style="padding:16px 14px; text-align:center;">
                     <img
