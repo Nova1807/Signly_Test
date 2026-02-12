@@ -1,6 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
+import { Request } from 'express';
 import { Strategy as AppleStrategyLib } from 'passport-apple';
+import jwt, { JwtPayload } from 'jsonwebtoken';
 
 @Injectable()
 export class AppleStrategy extends PassportStrategy(AppleStrategyLib, 'apple') {
@@ -37,6 +39,7 @@ export class AppleStrategy extends PassportStrategy(AppleStrategyLib, 'apple') {
         process.env.APPLE_CALLBACK_URL ??
         'https://backend.signly.at/auth/apple/redirect',
       scope: ['name', 'email'],
+      passReqToCallback: true,
     };
 
     super(options);
@@ -47,21 +50,58 @@ export class AppleStrategy extends PassportStrategy(AppleStrategyLib, 'apple') {
   }
 
   async validate(
+    req: Request,
     accessToken: string,
     refreshToken: string,
-    idToken: any,
+    params: Record<string, any> | string | undefined,
     profile: any,
     done: (error: any, user?: any) => void,
   ): Promise<any> {
     try {
-      const email = profile?.email || '';
+      const appleProfile = (req as any)?.appleProfile as
+        | { email?: string; name?: { firstName?: string; lastName?: string } }
+        | undefined;
+
+      const idToken =
+        (typeof params === 'string' ? params : params?.id_token) ||
+        (req.body as any)?.id_token;
+      if (!idToken) {
+        const error = new BadRequestException('Apple callback is missing id_token');
+        this.logger.error('Apple validate error: missing id_token in Apple response');
+        done(error, null);
+        throw error;
+      }
+
+      const decoded = jwt.decode(idToken, { json: true }) as
+        | (JwtPayload & {
+            email?: string;
+            email_verified?: string | boolean;
+            sub?: string;
+          })
+        | null;
+
+      if (!decoded) {
+        const error = new BadRequestException('Unable to decode Apple id_token');
+        this.logger.error('Apple validate error: could not decode id_token');
+        done(error, null);
+        throw error;
+      }
+
+      const email = appleProfile?.email || (decoded.email as string) || '';
       const name =
-        (profile?.name &&
-          [profile.name.firstName, profile.name.lastName]
+        (appleProfile?.name &&
+          [appleProfile.name.firstName, appleProfile.name.lastName]
             .filter(Boolean)
             .join(' ')) ||
         '';
-      const appleId = profile?.id;
+      const appleId = (decoded.sub as string) || '';
+
+      if (!appleId) {
+        const error = new BadRequestException('Apple id_token has no subject (appleId)');
+        this.logger.warn('Apple validate error: id_token has no sub');
+        done(error, null);
+        throw error;
+      }
 
       this.logger.log(
         `Apple validate called: email=${email}, name=${name}, appleId=${appleId}`,
