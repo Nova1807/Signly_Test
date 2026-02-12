@@ -40,12 +40,8 @@ export class AuthService {
     });
 
     if (hit) {
-      this.logger.warn(
-        `signup: forbidden name "${name}" contains "${hit}"`,
-      );
-      throw new BadRequestException(
-        'Dieser Benutzername ist nicht erlaubt',
-      );
+      this.logger.warn(`signup: forbidden name "${name}" contains "${hit}"`);
+      throw new BadRequestException('Dieser Benutzername ist nicht erlaubt');
     }
   }
 
@@ -70,11 +66,7 @@ export class AuthService {
       const lastDate = new Date(last);
       const diffDays = Math.floor(
         (Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) -
-          Date.UTC(
-            lastDate.getFullYear(),
-            lastDate.getMonth(),
-            lastDate.getDate(),
-          )) /
+          Date.UTC(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate())) /
           (1000 * 60 * 60 * 24),
       );
 
@@ -107,8 +99,7 @@ export class AuthService {
       (signupData && (signupData as any).username) ||
       (signupData && (signupData as any).displayName) ||
       '';
-    const name =
-      (typeof rawNameFromDto === 'string' ? rawNameFromDto.trim() : '').trim();
+    const name = (typeof rawNameFromDto === 'string' ? rawNameFromDto.trim() : '').trim();
 
     const { email, password } = signupData as any;
 
@@ -121,9 +112,7 @@ export class AuthService {
       throw new BadRequestException('Passwort ist erforderlich');
     }
     if (!name) {
-      this.logger.warn(
-        `signup: missing name (raw: ${JSON.stringify(rawNameFromDto)})`,
-      );
+      this.logger.warn(`signup: missing name (raw: ${JSON.stringify(rawNameFromDto)})`);
       throw new BadRequestException('Name ist erforderlich');
     }
 
@@ -136,9 +125,7 @@ export class AuthService {
 
       const emailRef = firestore.collection('users').where('email', '==', email);
       const emailSnapshot = await emailRef.get();
-      this.logger.log(
-        `signup: existing users with email=${email}: ${emailSnapshot.size}`,
-      );
+      this.logger.log(`signup: existing users with email=${email}: ${emailSnapshot.size}`);
 
       if (!emailSnapshot.empty) {
         this.logger.warn(`signup: email already in use: ${email}`);
@@ -147,15 +134,11 @@ export class AuthService {
 
       const nameRef = firestore.collection('users').where('name', '==', name);
       const nameSnapshot = await nameRef.get();
-      this.logger.log(
-        `signup: existing users with name=${name}: ${nameSnapshot.size}`,
-      );
+      this.logger.log(`signup: existing users with name=${name}: ${nameSnapshot.size}`);
 
       if (!nameSnapshot.empty) {
         this.logger.warn(`signup: name already in use: ${name}`);
-        throw new BadRequestException(
-          'Dieser Benutzername ist bereits vergeben',
-        );
+        throw new BadRequestException('Dieser Benutzername ist bereits vergeben');
       }
 
       const hashedPassword = await bcrypt.hash(password, 10);
@@ -167,12 +150,8 @@ export class AuthService {
         .get();
 
       if (!oldTokensQuery.empty) {
-        this.logger.log(
-          `signup: deleting ${oldTokensQuery.size} old tokens for ${email}`,
-        );
-        const deletePromises = oldTokensQuery.docs.map((doc) =>
-          doc.ref.delete(),
-        );
+        this.logger.log(`signup: deleting ${oldTokensQuery.size} old tokens for ${email}`);
+        const deletePromises = oldTokensQuery.docs.map((doc) => doc.ref.delete());
         await Promise.all(deletePromises);
       }
 
@@ -192,9 +171,7 @@ export class AuthService {
         expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
       });
 
-      this.logger.log(
-        'signup: email verification document created with token as document ID',
-      );
+      this.logger.log('signup: email verification document created with token as document ID');
 
       await this.mailerService.sendVerificationEmail(email, token, name);
       this.logger.log('signup: verification email sent');
@@ -219,8 +196,7 @@ export class AuthService {
       const firestore = this.firebaseApp.firestore();
       this.logger.log('login: got firestore instance');
 
-      const isEmail =
-        typeof identifier === 'string' && identifier.includes('@');
+      const isEmail = typeof identifier === 'string' && identifier.includes('@');
 
       const userQuery = isEmail
         ? firestore.collection('users').where('email', '==', identifier)
@@ -228,35 +204,23 @@ export class AuthService {
 
       const snapshot = await userQuery.get();
       this.logger.log(
-        `login: users found with ${
-          isEmail ? 'email' : 'name'
-        }=${identifier}: ${snapshot.size}`,
+        `login: users found with ${isEmail ? 'email' : 'name'}=${identifier}: ${snapshot.size}`,
       );
 
       if (snapshot.empty) {
-        this.logger.warn(
-          `login: no user found for ${
-            isEmail ? 'email' : 'name'
-          }=${identifier}`,
-        );
+        this.logger.warn(`login: no user found for ${isEmail ? 'email' : 'name'}=${identifier}`);
         throw new UnauthorizedException('Wrong credentials');
       }
 
       const userDoc = snapshot.docs[0];
       const user = userDoc.data() as any;
-      this.logger.log(
-        `login: userDoc id=${userDoc.id}, user=${JSON.stringify(user)}`,
-      );
+      this.logger.log(`login: userDoc id=${userDoc.id}, user=${JSON.stringify(user)}`);
 
       const passwordMatch = await bcrypt.compare(password, user.password);
       this.logger.log(`login: passwordMatch=${passwordMatch}`);
 
       if (!passwordMatch) {
-        this.logger.warn(
-          `login: wrong password for ${
-            isEmail ? 'email' : 'name'
-          }=${identifier}`,
-        );
+        this.logger.warn(`login: wrong password for ${isEmail ? 'email' : 'name'}=${identifier}`);
         throw new UnauthorizedException('Wrong credentials');
       }
 
@@ -304,18 +268,13 @@ export class AuthService {
 
       const tokenDoc = snapshot.docs[0];
       const token = tokenDoc.data() as any;
-      this.logger.log(
-        `refreshTokens: tokenDoc id=${tokenDoc.id}, userId=${token.userId}`,
-      );
+      this.logger.log(`refreshTokens: tokenDoc id=${tokenDoc.id}, userId=${token.userId}`);
 
       const tokens = await this.generateUserToken(token.userId);
       this.logger.log('refreshTokens: new tokens generated');
       return tokens;
     } catch (err) {
-      this.logger.error(
-        `refreshTokens internal error: ${err?.message}`,
-        err?.stack,
-      );
+      this.logger.error(`refreshTokens internal error: ${err?.message}`, err?.stack);
       throw err;
     }
   }
@@ -394,9 +353,7 @@ export class AuthService {
       const password = tokenData.password;
       const name: string = (tokenData.name && String(tokenData.name)) || '';
 
-      this.logger.log(
-        `verifyEmailToken: tokenData.email='${email}', name='${name}'`,
-      );
+      this.logger.log(`verifyEmailToken: tokenData.email='${email}', name='${name}'`);
 
       if (!email || !password) {
         this.logger.warn(`verifyEmailToken: missing required fields`);
@@ -408,15 +365,10 @@ export class AuthService {
         };
       }
 
-      const userQuery = await firestore
-        .collection('users')
-        .where('email', '==', email)
-        .get();
+      const userQuery = await firestore.collection('users').where('email', '==', email).get();
 
       if (!userQuery.empty) {
-        this.logger.log(
-          `verifyEmailToken: user already exists for email: ${email}`,
-        );
+        this.logger.log(`verifyEmailToken: user already exists for email: ${email}`);
         const existingUser = userQuery.docs[0];
         try {
           await docRef.delete();
@@ -424,9 +376,7 @@ export class AuthService {
             `verifyEmailToken: deleted emailVerification token after existing user for email=${email}`,
           );
         } catch (delErr) {
-          this.logger.warn(
-            `verifyEmailToken: failed to delete token doc: ${delErr?.message}`,
-          );
+          this.logger.warn(`verifyEmailToken: failed to delete token doc: ${delErr?.message}`);
         }
 
         return {
@@ -438,9 +388,7 @@ export class AuthService {
         };
       }
 
-      this.logger.log(
-        `verifyEmailToken: creating user for email: ${email}`,
-      );
+      this.logger.log(`verifyEmailToken: creating user for email: ${email}`);
       const userRef = await firestore.collection('users').add({
         email,
         password,
@@ -453,9 +401,7 @@ export class AuthService {
         aboutMe: '',
       });
 
-      this.logger.log(
-        `verifyEmailToken: user created with ID: ${userRef.id}`,
-      );
+      this.logger.log(`verifyEmailToken: user created with ID: ${userRef.id}`);
 
       try {
         await docRef.delete();
@@ -487,11 +433,7 @@ export class AuthService {
   }
 
   // Google-Login mit Login-Streak
-  async loginWithGoogle(googleUser: {
-    email: string;
-    name: string;
-    googleId: string;
-  }) {
+  async loginWithGoogle(googleUser: { email: string; name: string; googleId: string }) {
     this.logger.log(
       `loginWithGoogle start: email=${googleUser.email}, googleId=${googleUser.googleId}`,
     );
@@ -564,9 +506,7 @@ export class AuthService {
           now,
         );
 
-        this.logger.log(
-          `loginWithGoogle: creating new user for email=${googleUser.email}`,
-        );
+        this.logger.log(`loginWithGoogle: creating new user for email=${googleUser.email}`);
 
         const newUserRef = await firestore.collection('users').add({
           email: googleUser.email,
@@ -583,9 +523,7 @@ export class AuthService {
         loginStreak = streakData.loginStreak;
         longestLoginStreak = streakData.longestLoginStreak;
 
-        this.logger.log(
-          `loginWithGoogle: new user created with ID=${userId}`,
-        );
+        this.logger.log(`loginWithGoogle: new user created with ID=${userId}`);
       }
     }
 
@@ -604,18 +542,18 @@ export class AuthService {
   }
 
   // Apple-Login mit Login-Streak
-  async loginWithApple(appleUser: {
-    email: string;
-    name: string;
-    appleId: string;
-  }) {
+  async loginWithApple(appleUser: { email: string; name: string; appleId: string }) {
     this.logger.log(
       `loginWithApple start: email=${appleUser.email}, appleId=${appleUser.appleId}`,
     );
 
-    if (!appleUser.email) {
-      this.logger.warn('loginWithApple: missing email from Apple profile');
-      throw new BadRequestException('Apple account has no email');
+    /**
+     * Apple liefert email (und name) oft nur beim allerersten Login/Consent.
+     * Deshalb: Primär über appleId matchen; email nur für Merge/Create verwenden. [web:31]
+     */
+    if (!appleUser.appleId) {
+      this.logger.warn('loginWithApple: missing appleId from Apple profile');
+      throw new BadRequestException('Apple login has no appleId');
     }
 
     const firestore = this.firebaseApp.firestore();
@@ -626,6 +564,7 @@ export class AuthService {
     let loginStreak = 0;
     let longestLoginStreak = 0;
 
+    // 1) Zuerst appleId (funktioniert auch ohne email) [web:31]
     const appleIdQuery = await firestore
       .collection('users')
       .where('appleId', '==', appleUser.appleId)
@@ -649,6 +588,16 @@ export class AuthService {
         `loginWithApple: found user by appleId=${appleUser.appleId}, userId=${userId}`,
       );
     } else {
+      // 2) Kein user via appleId → dann brauchen wir email für Merge/Create
+      if (!appleUser.email) {
+        this.logger.warn(
+          'loginWithApple: Apple did not provide email and no existing user found by appleId',
+        );
+        throw new BadRequestException(
+          'Apple did not provide email. Please re-authorize email scope and try again.',
+        );
+      }
+
       const emailQuery = await firestore
         .collection('users')
         .where('email', '==', appleUser.email)
@@ -717,9 +666,7 @@ export class AuthService {
 
   // Profil aktualisieren (Name + AboutMe)
   async updateProfile(userId: string, dto: UpdateProfileDto) {
-    this.logger.log(
-      `updateProfile start: userId=${userId}, dto=${JSON.stringify(dto)}`,
-    );
+    this.logger.log(`updateProfile start: userId=${userId}, dto=${JSON.stringify(dto)}`);
 
     const firestore = this.firebaseApp.firestore();
     const userRef = firestore.collection('users').doc(userId);
@@ -735,19 +682,13 @@ export class AuthService {
     if (dto.name && dto.name.trim()) {
       const newName = dto.name.trim();
 
-      const nameRef = firestore
-        .collection('users')
-        .where('name', '==', newName);
+      const nameRef = firestore.collection('users').where('name', '==', newName);
       const nameSnapshot = await nameRef.get();
 
       const conflict = nameSnapshot.docs.find((d) => d.id !== userId);
       if (conflict) {
-        this.logger.warn(
-          `updateProfile: name already in use by other user: ${newName}`,
-        );
-        throw new BadRequestException(
-          'Dieser Benutzername ist bereits vergeben',
-        );
+        this.logger.warn(`updateProfile: name already in use by other user: ${newName}`);
+        throw new BadRequestException('Dieser Benutzername ist bereits vergeben');
       }
 
       this.validateNameAgainstForbiddenWords(newName);
