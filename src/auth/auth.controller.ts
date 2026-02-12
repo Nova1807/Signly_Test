@@ -281,6 +281,14 @@ export class AuthController {
   }
 
 
+  // Support POST callback as well (e.g. from Apple or client)
+  @Post('apple/redirect')
+  @UseGuards(AppleAuthGuard)
+  async appleAuthRedirectPost(@Req() req: Request, @Res() res: Response) {
+    return this.appleAuthRedirect(req, res);
+  }
+
+
   // Profil-Update: alles im Body (accessToken + name + aboutMe)
   @Post('profile')
   async updateProfile(@Body() dto: UpdateProfileDto) {
