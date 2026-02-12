@@ -20,6 +20,8 @@ export class AppleStrategy extends PassportStrategy(AppleStrategyLib, 'apple') {
 
     super(options);
 
+    this.logger.log(`AppleStrategy initialized with callbackURL=${options.callbackURL}`);
+
     if (!options.clientID || !options.teamID || !options.keyID || !options.key) {
       this.logger.warn(
         'AppleStrategy initialized without full Apple env configuration (APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY).',

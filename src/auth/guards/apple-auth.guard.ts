@@ -6,7 +6,14 @@ export class AppleAuthGuard extends AuthGuard('apple') {
   private readonly logger = new Logger(AppleAuthGuard.name);
 
   getAuthenticateOptions(): any {
-    this.logger.log('Starting Apple OAuth flow via AppleAuthGuard');
+    const callbackURL =
+      process.env.APPLE_CALLBACK_URL ??
+      'https://backend.signly.at/auth/apple/redirect';
+
+    this.logger.log(
+      `Starting Apple OAuth flow via AppleAuthGuard (callbackURL=${callbackURL})`,
+    );
+
     return {};
   }
 }

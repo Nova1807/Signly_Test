@@ -205,7 +205,7 @@ export class AuthController {
     return;
   }
 
-  @Get('apple/redirect')
+  @Post('apple/redirect')
   @UseGuards(AppleAuthGuard)
   async appleAuthRedirect(@Req() req: Request, @Res() res: Response) {
     this.logger.log(
