@@ -7,13 +7,31 @@ export class AppleStrategy extends PassportStrategy(AppleStrategyLib, 'apple') {
   private readonly logger = new Logger(AppleStrategy.name);
 
   constructor() {
+    // ENV lesen und prüfen BEVOR passport-apple (super) ausgeführt wird
     const rawPrivateKey = process.env.APPLE_PRIVATE_KEY || '';
     const formattedPrivateKey = rawPrivateKey.replace(/\\n/g, '\n');
 
+    const clientID = process.env.APPLE_CLIENT_ID || '';
+    const teamID = process.env.APPLE_TEAM_ID || '';
+    const keyID = process.env.APPLE_KEY_ID || '';
+
+    // Hier KEIN this benutzen – wir sind vor super()
+    // Stattdessen direkt in stdout loggen, damit du es sicher im Container-Log siehst
+    // eslint-disable-next-line no-console
+    console.log(
+      `[AppleStrategy pre-super] clientID=${!!clientID}, teamID=${!!teamID}, keyID=${!!keyID}, keyLength=${formattedPrivateKey.length}`,
+    );
+
+    if (!clientID || !teamID || !keyID || !formattedPrivateKey) {
+      throw new Error(
+        '[AppleStrategy] Missing required env vars. Please set APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID and APPLE_PRIVATE_KEY.',
+      );
+    }
+
     const options: any = {
-      clientID: process.env.APPLE_CLIENT_ID || '',
-      teamID: process.env.APPLE_TEAM_ID || '',
-      keyID: process.env.APPLE_KEY_ID || '',
+      clientID,
+      teamID,
+      keyID,
       key: formattedPrivateKey,
       callbackURL:
         process.env.APPLE_CALLBACK_URL ??
@@ -24,16 +42,8 @@ export class AppleStrategy extends PassportStrategy(AppleStrategyLib, 'apple') {
     super(options);
 
     this.logger.log(
-      `AppleStrategy env check: clientID=${!!options.clientID}, teamID=${!!options.teamID}, keyID=${!!options.keyID}, keyLength=${options.key?.length || 0}`,
+      `AppleStrategy initialized with callbackURL=${options.callbackURL}`,
     );
-
-    if (!options.clientID || !options.teamID || !options.keyID || !options.key) {
-      this.logger.error(
-        'AppleStrategy missing required env vars. Please set APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID and APPLE_PRIVATE_KEY.',
-      );
-    }
-
-    this.logger.log(`AppleStrategy initialized with callbackURL=${options.callbackURL}`);
   }
 
   async validate(
