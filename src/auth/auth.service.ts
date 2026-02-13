@@ -18,6 +18,18 @@ import { UpdateProfileDto } from './update-profile.dto';
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  private readonly lessonIds: number[] = this.buildIndexList(
+    process.env.LESSON_IDS,
+    Number(process.env.LESSON_COUNT ?? process.env.DEFAULT_LESSON_COUNT ?? '100'),
+  );
+  private readonly testIds: number[] = this.buildIndexList(
+    process.env.TEST_IDS,
+    Number(process.env.TEST_COUNT ?? process.env.DEFAULT_TEST_COUNT ?? '100'),
+  );
+  private readonly lessonIdSet = new Set(this.lessonIds);
+  private readonly testIdSet = new Set(this.testIds);
+  private readonly lessonBlueprint: number[][] = this.lessonIds.map((id) => [id, 0]);
+  private readonly testBlueprint: number[][] = this.testIds.map((id) => [id, 0]);
 
   // words.json ist ein reines Array von Strings
   private readonly forbiddenWords: string[] = (words as string[])
@@ -91,6 +103,24 @@ export class AuthService {
     };
   }
 
+  private buildIndexList(idsCsv?: string, count?: number): number[] {
+    const parsedFromCsv =
+      idsCsv
+        ?.split(',')
+        .map((part) => Number(part.trim()))
+        .filter((n) => Number.isFinite(n) && n >= 0) ?? [];
+
+    if (parsedFromCsv.length > 0) {
+      return Array.from(new Set(parsedFromCsv)).sort((a, b) => a - b);
+    }
+
+    if (typeof count === 'number' && Number.isFinite(count) && count > 0) {
+      return Array.from({ length: Math.floor(count) }, (_, index) => index);
+    }
+
+    return [];
+  }
+
   private normalizePerformanceMatrix(value: any): number[][] {
     if (!Array.isArray(value)) return [];
     const normalized: number[][] = [];
@@ -106,6 +136,26 @@ export class AuthService {
     return normalized;
   }
 
+  private mergeWithBlueprint(matrix: number[][], blueprint: number[][]): number[][] {
+    const merged = new Map<number, number>();
+    for (const [id, percentage] of blueprint) {
+      merged.set(id, percentage);
+    }
+    for (const [id, percentage] of matrix) {
+      const clamped = Math.max(0, Math.min(100, percentage));
+      merged.set(id, clamped);
+    }
+    return Array.from(merged.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([id, percentage]) => [id, percentage]);
+  }
+
+  private getInitialMatrix(kind: 'lesson' | 'test'): number[][] {
+    const source = kind === 'lesson' ? this.lessonBlueprint : this.testBlueprint;
+    if (!source.length) return [];
+    return source.map(([id, value]) => [id, value]);
+  }
+
   private async ensureUserPerformanceMatrices(
     userDoc: admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot,
   ): Promise<void> {
@@ -116,18 +166,21 @@ export class AuthService {
     const lessonMatrix = this.normalizePerformanceMatrix(data.lessonPerformanceMatrix);
     const testMatrix = this.normalizePerformanceMatrix(data.testPerformanceMatrix);
 
-    if (
-      !Array.isArray(data.lessonPerformanceMatrix) ||
-      JSON.stringify(lessonMatrix) !== JSON.stringify(data.lessonPerformanceMatrix)
-    ) {
-      updates.lessonPerformanceMatrix = lessonMatrix;
+    const mergedLesson = this.mergeWithBlueprint(
+      lessonMatrix,
+      this.lessonBlueprint.length ? this.lessonBlueprint : [],
+    );
+    const mergedTest = this.mergeWithBlueprint(
+      testMatrix,
+      this.testBlueprint.length ? this.testBlueprint : [],
+    );
+
+    if (JSON.stringify(lessonMatrix) !== JSON.stringify(mergedLesson)) {
+      updates.lessonPerformanceMatrix = mergedLesson;
     }
 
-    if (
-      !Array.isArray(data.testPerformanceMatrix) ||
-      JSON.stringify(testMatrix) !== JSON.stringify(data.testPerformanceMatrix)
-    ) {
-      updates.testPerformanceMatrix = testMatrix;
+    if (JSON.stringify(testMatrix) !== JSON.stringify(mergedTest)) {
+      updates.testPerformanceMatrix = mergedTest;
     }
 
     if (Object.keys(updates).length > 0) {
@@ -169,6 +222,20 @@ export class AuthService {
 
       const data = userSnap.data() || {};
       const matrix = this.normalizePerformanceMatrix(data[matrixKey]);
+      const allowedSet =
+        matrixKey === 'lessonPerformanceMatrix' ? this.lessonIdSet : this.testIdSet;
+
+      if (allowedSet.size > 0 && !allowedSet.has(entryId)) {
+        this.logger.warn(
+          `updatePerformanceMatrix: entryId ${entryId} not allowed for ${matrixKey}`,
+        );
+        throw new BadRequestException(
+          matrixKey === 'lessonPerformanceMatrix'
+            ? 'Unknown lessonId'
+            : 'Unknown testId',
+        );
+      }
+
       const existingIndex = matrix.findIndex(([id]) => id === entryId);
 
       if (existingIndex >= 0) {
@@ -178,11 +245,16 @@ export class AuthService {
         matrix.sort((a, b) => a[0] - b[0]);
       }
 
+      const blueprint =
+        matrixKey === 'lessonPerformanceMatrix' ? this.lessonBlueprint : this.testBlueprint;
+
+      const merged = this.mergeWithBlueprint(matrix, blueprint.length ? blueprint : []);
+
       tx.update(userRef, {
-        [matrixKey]: matrix,
+        [matrixKey]: merged,
       });
 
-      return matrix;
+      return merged;
     });
 
     this.logger.log(
@@ -196,8 +268,9 @@ export class AuthService {
     const { userDoc } = await this.getUserDocument(userId);
     const data = userDoc.data() as any;
     return {
-      lessonPerformanceMatrix: this.normalizePerformanceMatrix(
-        data?.lessonPerformanceMatrix,
+      lessonPerformanceMatrix: this.mergeWithBlueprint(
+        this.normalizePerformanceMatrix(data?.lessonPerformanceMatrix),
+        this.lessonBlueprint.length ? this.lessonBlueprint : [],
       ),
     };
   }
@@ -216,7 +289,10 @@ export class AuthService {
     const { userDoc } = await this.getUserDocument(userId);
     const data = userDoc.data() as any;
     return {
-      testPerformanceMatrix: this.normalizePerformanceMatrix(data?.testPerformanceMatrix),
+      testPerformanceMatrix: this.mergeWithBlueprint(
+        this.normalizePerformanceMatrix(data?.testPerformanceMatrix),
+        this.testBlueprint.length ? this.testBlueprint : [],
+      ),
     };
   }
 
@@ -535,12 +611,12 @@ export class AuthService {
         name,
         emailVerified: true,
         createdAt: admin.firestore.Timestamp.fromDate(new Date()),
-        loginStreak: 0,
-        longestLoginStreak: 0,
-        lastLoginDate: null,
-        aboutMe: '',
-        lessonPerformanceMatrix: [],
-        testPerformanceMatrix: [],
+      loginStreak: 0,
+      longestLoginStreak: 0,
+      lastLoginDate: null,
+      aboutMe: '',
+      lessonPerformanceMatrix: this.getInitialMatrix('lesson'),
+      testPerformanceMatrix: this.getInitialMatrix('test'),
       });
 
       this.logger.log(`verifyEmailToken: user created with ID: ${userRef.id}`);
@@ -660,8 +736,8 @@ export class AuthService {
           password: null,
           createdAt: admin.firestore.Timestamp.fromDate(now),
           aboutMe: '',
-          lessonPerformanceMatrix: [],
-          testPerformanceMatrix: [],
+          lessonPerformanceMatrix: this.getInitialMatrix('lesson'),
+          testPerformanceMatrix: this.getInitialMatrix('test'),
           ...streakData,
         });
 
@@ -787,8 +863,8 @@ export class AuthService {
           password: null,
           createdAt: admin.firestore.Timestamp.fromDate(now),
           aboutMe: '',
-          lessonPerformanceMatrix: [],
-          testPerformanceMatrix: [],
+          lessonPerformanceMatrix: this.getInitialMatrix('lesson'),
+          testPerformanceMatrix: this.getInitialMatrix('test'),
           ...streakData,
         });
 

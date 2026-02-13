@@ -1,31 +1,23 @@
-import {
-  Controller,
-  Get,
-  Param,
-  Res,
-  NotFoundException,
-} from '@nestjs/common';
-import { join } from 'path';
-import { existsSync } from 'fs';
+import { Controller, Get, Param, Res, NotFoundException } from '@nestjs/common';
 import { type Response } from 'express';
 
 @Controller('email-assets')
 export class EmailAssetsController {
   @Get(':fileName')
   getAsset(@Param('fileName') fileName: string, @Res() res: Response) {
-    const allowedFiles = ['Logo.png', 'Maskotchen.png'];
+    const assetMap: Record<string, string> = {
+      'Logo.png':
+        'https://storage.googleapis.com/signlydaten/schlange/Signly_logo_color_flatt2.png',
+      'Maskotchen.png':
+        'https://storage.googleapis.com/signlydaten/schlange/Maskotchen.png',
+    };
 
-    if (!allowedFiles.includes(fileName)) {
+    const targetUrl = assetMap[fileName];
+
+    if (!targetUrl) {
       throw new NotFoundException();
     }
 
-    // Pfad relativ zu src/auth/Bilder
-    const filePath = join(__dirname, 'Bilder', fileName);
-
-    if (!existsSync(filePath)) {
-      throw new NotFoundException();
-    }
-
-    return res.sendFile(filePath);
+    return res.redirect(targetUrl);
   }
 }
