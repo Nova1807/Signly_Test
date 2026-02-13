@@ -25,6 +25,10 @@ import { renderSuccessPageHtml, renderExpiredPageHtml } from './templates';
 import { UpdateProfileDto } from './update-profile.dto';
 import { JwtService } from '@nestjs/jwt';
 import { AppleSignInService } from './apple/apple-signin.service';
+import {
+  UpdateLessonPerformanceDto,
+  UpdateTestPerformanceDto,
+} from './dto/update-performance.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -322,6 +326,54 @@ export class AuthController {
     return this.authService.getStreak(userId);
   }
 
+  @Get('lessons/performance')
+  async getLessonPerformance(
+    @Query('accessToken') accessTokenQuery: string | undefined,
+    @Req() req: Request,
+  ) {
+    this.logger.log('getLessonPerformance called');
+    const accessToken = this.resolveAccessToken(req, accessTokenQuery);
+    const userId = this.resolveUserIdFromToken(accessToken);
+    return this.authService.getLessonPerformance(userId);
+  }
+
+  @Post('lessons/performance')
+  async updateLessonPerformance(
+    @Body() dto: UpdateLessonPerformanceDto,
+    @Req() req: Request,
+  ) {
+    this.logger.log(
+      `updateLessonPerformance called: lessonId=${dto.lessonId}, percentage=${dto.percentage}`,
+    );
+    const accessToken = this.resolveAccessToken(req, undefined, dto.accessToken);
+    const userId = this.resolveUserIdFromToken(accessToken);
+    return this.authService.updateLessonPerformance(userId, dto.lessonId, dto.percentage);
+  }
+
+  @Get('tests/performance')
+  async getTestPerformance(
+    @Query('accessToken') accessTokenQuery: string | undefined,
+    @Req() req: Request,
+  ) {
+    this.logger.log('getTestPerformance called');
+    const accessToken = this.resolveAccessToken(req, accessTokenQuery);
+    const userId = this.resolveUserIdFromToken(accessToken);
+    return this.authService.getTestPerformance(userId);
+  }
+
+  @Post('tests/performance')
+  async updateTestPerformance(
+    @Body() dto: UpdateTestPerformanceDto,
+    @Req() req: Request,
+  ) {
+    this.logger.log(
+      `updateTestPerformance called: testId=${dto.testId}, percentage=${dto.percentage}`,
+    );
+    const accessToken = this.resolveAccessToken(req, undefined, dto.accessToken);
+    const userId = this.resolveUserIdFromToken(accessToken);
+    return this.authService.updateTestPerformance(userId, dto.testId, dto.percentage);
+  }
+
   // zentraler, geschützter GLB-Download-Endpunkt
   @Get('glb')
   async getGlb(
@@ -362,6 +414,41 @@ export class AuthController {
       if (err instanceof UnauthorizedException) return res.status(401).json({ error: err.message });
       if (err instanceof ForbiddenException) return res.status(403).json({ error: err.message });
       return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  private resolveAccessToken(
+    req: Request,
+    accessTokenQuery?: string,
+    accessTokenBody?: string,
+  ): string {
+    const authHeader = (req.headers && (req.headers['authorization'] as string)) || '';
+    const bearerToken = authHeader?.replace(/^Bearer\s+/i, '') || undefined;
+    const token =
+      (accessTokenBody && accessTokenBody.trim()) ||
+      (accessTokenQuery && accessTokenQuery.trim()) ||
+      (bearerToken && bearerToken.trim());
+
+    if (!token) {
+      this.logger.warn('resolveAccessToken: missing access token');
+      throw new UnauthorizedException('Missing access token');
+    }
+
+    return token;
+  }
+
+  private resolveUserIdFromToken(accessToken: string): string {
+    try {
+      const payload = this.jwtService.verify(accessToken);
+      const userId = payload?.userId;
+      if (!userId) {
+        this.logger.warn('resolveUserIdFromToken: token payload has no userId');
+        throw new UnauthorizedException('Invalid token payload');
+      }
+      return userId;
+    } catch (err: any) {
+      this.logger.warn(`resolveUserIdFromToken: invalid access token: ${err?.message}`);
+      throw new UnauthorizedException('Invalid access token');
     }
   }
 }

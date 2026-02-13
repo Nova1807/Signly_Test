@@ -91,6 +91,145 @@ export class AuthService {
     };
   }
 
+  private normalizePerformanceMatrix(value: any): number[][] {
+    if (!Array.isArray(value)) return [];
+    const normalized: number[][] = [];
+    for (const entry of value) {
+      if (Array.isArray(entry) && entry.length >= 2) {
+        const lessonIndex = Number(entry[0]);
+        const percentage = Number(entry[1]);
+        if (Number.isFinite(lessonIndex) && Number.isFinite(percentage)) {
+          normalized.push([lessonIndex, Math.max(0, Math.min(100, percentage))]);
+        }
+      }
+    }
+    return normalized;
+  }
+
+  private async ensureUserPerformanceMatrices(
+    userDoc: admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot,
+  ): Promise<void> {
+    const data = userDoc.data();
+    if (!data) return;
+
+    const updates: Record<string, any> = {};
+    const lessonMatrix = this.normalizePerformanceMatrix(data.lessonPerformanceMatrix);
+    const testMatrix = this.normalizePerformanceMatrix(data.testPerformanceMatrix);
+
+    if (
+      !Array.isArray(data.lessonPerformanceMatrix) ||
+      JSON.stringify(lessonMatrix) !== JSON.stringify(data.lessonPerformanceMatrix)
+    ) {
+      updates.lessonPerformanceMatrix = lessonMatrix;
+    }
+
+    if (
+      !Array.isArray(data.testPerformanceMatrix) ||
+      JSON.stringify(testMatrix) !== JSON.stringify(data.testPerformanceMatrix)
+    ) {
+      updates.testPerformanceMatrix = testMatrix;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await userDoc.ref.update(updates);
+      this.logger.log(
+        `ensureUserPerformanceMatrices: backfilled performance matrices for user=${userDoc.id}`,
+      );
+    }
+  }
+
+  private async getUserDocument(userId: string) {
+    const firestore = this.firebaseApp.firestore();
+    const userRef = firestore.collection('users').doc(userId);
+    const userDoc = await userRef.get();
+    if (!userDoc.exists) {
+      this.logger.warn(`getUserDocument: user not found userId=${userId}`);
+      throw new BadRequestException('User not found');
+    }
+    await this.ensureUserPerformanceMatrices(userDoc);
+    return { userDoc, userRef };
+  }
+
+  private async updatePerformanceMatrix(
+    userId: string,
+    matrixKey: 'lessonPerformanceMatrix' | 'testPerformanceMatrix',
+    entryId: number,
+    percentage: number,
+  ): Promise<number[][]> {
+    const firestore = this.firebaseApp.firestore();
+    const clampedPercentage = Math.max(0, Math.min(100, percentage));
+    const userRef = firestore.collection('users').doc(userId);
+
+    const updatedMatrix = await firestore.runTransaction(async (tx) => {
+      const userSnap = await tx.get(userRef);
+      if (!userSnap.exists) {
+        this.logger.warn(`updatePerformanceMatrix: user not found userId=${userId}`);
+        throw new BadRequestException('User not found');
+      }
+
+      const data = userSnap.data() || {};
+      const matrix = this.normalizePerformanceMatrix(data[matrixKey]);
+      const existingIndex = matrix.findIndex(([id]) => id === entryId);
+
+      if (existingIndex >= 0) {
+        matrix[existingIndex][1] = clampedPercentage;
+      } else {
+        matrix.push([entryId, clampedPercentage]);
+        matrix.sort((a, b) => a[0] - b[0]);
+      }
+
+      tx.update(userRef, {
+        [matrixKey]: matrix,
+      });
+
+      return matrix;
+    });
+
+    this.logger.log(
+      `updatePerformanceMatrix: updated ${matrixKey} for userId=${userId}, entryId=${entryId}, percentage=${clampedPercentage}`,
+    );
+
+    return updatedMatrix;
+  }
+
+  async getLessonPerformance(userId: string) {
+    const { userDoc } = await this.getUserDocument(userId);
+    const data = userDoc.data() as any;
+    return {
+      lessonPerformanceMatrix: this.normalizePerformanceMatrix(
+        data?.lessonPerformanceMatrix,
+      ),
+    };
+  }
+
+  async updateLessonPerformance(userId: string, lessonId: number, percentage: number) {
+    const lessonPerformanceMatrix = await this.updatePerformanceMatrix(
+      userId,
+      'lessonPerformanceMatrix',
+      lessonId,
+      percentage,
+    );
+    return { lessonPerformanceMatrix };
+  }
+
+  async getTestPerformance(userId: string) {
+    const { userDoc } = await this.getUserDocument(userId);
+    const data = userDoc.data() as any;
+    return {
+      testPerformanceMatrix: this.normalizePerformanceMatrix(data?.testPerformanceMatrix),
+    };
+  }
+
+  async updateTestPerformance(userId: string, testId: number, percentage: number) {
+    const testPerformanceMatrix = await this.updatePerformanceMatrix(
+      userId,
+      'testPerformanceMatrix',
+      testId,
+      percentage,
+    );
+    return { testPerformanceMatrix };
+  }
+
   async signup(signupData: SignupDto) {
     this.logger.log(`signup start: ${JSON.stringify(signupData)}`);
 
@@ -213,6 +352,7 @@ export class AuthService {
       }
 
       const userDoc = snapshot.docs[0];
+      await this.ensureUserPerformanceMatrices(userDoc);
       const user = userDoc.data() as any;
       this.logger.log(`login: userDoc id=${userDoc.id}, user=${JSON.stringify(user)}`);
 
@@ -399,6 +539,8 @@ export class AuthService {
         longestLoginStreak: 0,
         lastLoginDate: null,
         aboutMe: '',
+        lessonPerformanceMatrix: [],
+        testPerformanceMatrix: [],
       });
 
       this.logger.log(`verifyEmailToken: user created with ID: ${userRef.id}`);
@@ -461,6 +603,7 @@ export class AuthService {
       const userDoc = googleIdQuery.docs[0];
       const user = userDoc.data() as any;
       userId = userDoc.id;
+      await this.ensureUserPerformanceMatrices(userDoc);
 
       const streakData = this.updateLoginStreak(user, now);
 
@@ -485,6 +628,7 @@ export class AuthService {
         const userDoc = emailQuery.docs[0];
         const user = userDoc.data() as any;
         userId = userDoc.id;
+        await this.ensureUserPerformanceMatrices(userDoc);
 
         const streakData = this.updateLoginStreak(user, now);
 
@@ -516,6 +660,8 @@ export class AuthService {
           password: null,
           createdAt: admin.firestore.Timestamp.fromDate(now),
           aboutMe: '',
+          lessonPerformanceMatrix: [],
+          testPerformanceMatrix: [],
           ...streakData,
         });
 
@@ -574,6 +720,7 @@ export class AuthService {
       const userDoc = appleIdQuery.docs[0];
       const user = userDoc.data() as any;
       userId = userDoc.id;
+      await this.ensureUserPerformanceMatrices(userDoc);
 
       const streakData = this.updateLoginStreak(user, now);
 
@@ -607,6 +754,7 @@ export class AuthService {
         const userDoc = emailQuery.docs[0];
         const user = userDoc.data() as any;
         userId = userDoc.id;
+        await this.ensureUserPerformanceMatrices(userDoc);
 
         const streakData = this.updateLoginStreak(user, now);
 
@@ -639,6 +787,8 @@ export class AuthService {
           password: null,
           createdAt: admin.firestore.Timestamp.fromDate(now),
           aboutMe: '',
+          lessonPerformanceMatrix: [],
+          testPerformanceMatrix: [],
           ...streakData,
         });
 
