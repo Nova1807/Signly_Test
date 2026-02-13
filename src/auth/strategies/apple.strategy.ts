@@ -34,7 +34,7 @@ export class AppleStrategy extends PassportStrategy(AppleStrategyLib, 'apple') {
       clientID,
       teamID,
       keyID,
-      key: formattedPrivateKey,
+      privateKeyString: formattedPrivateKey,
       callbackURL:
         process.env.APPLE_CALLBACK_URL ??
         'https://backend.signly.at/auth/apple/redirect',
@@ -53,7 +53,7 @@ export class AppleStrategy extends PassportStrategy(AppleStrategyLib, 'apple') {
     req: Request,
     accessToken: string,
     refreshToken: string,
-    params: Record<string, any> | string | undefined,
+    idToken: string | undefined,
     profile: any,
     done: (error: any, user?: any) => void,
   ): Promise<any> {
@@ -62,17 +62,15 @@ export class AppleStrategy extends PassportStrategy(AppleStrategyLib, 'apple') {
         | { email?: string; name?: { firstName?: string; lastName?: string } }
         | undefined;
 
-      const idToken =
-        (typeof params === 'string' ? params : params?.id_token) ||
-        (req.body as any)?.id_token;
-      if (!idToken) {
+      const effectiveIdToken = idToken || (req.body as any)?.id_token;
+      if (!effectiveIdToken) {
         const error = new BadRequestException('Apple callback is missing id_token');
         this.logger.error('Apple validate error: missing id_token in Apple response');
         done(error, null);
         throw error;
       }
 
-      const decoded = jwt.decode(idToken, { json: true }) as
+      const decoded = jwt.decode(effectiveIdToken, { json: true }) as
         | (JwtPayload & {
             email?: string;
             email_verified?: string | boolean;
