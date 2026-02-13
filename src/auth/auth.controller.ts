@@ -10,7 +10,6 @@ import {
   UseGuards,
   Req,
   UnauthorizedException,
-  ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
@@ -20,7 +19,6 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import type { Response, Request } from 'express';
 import * as admin from 'firebase-admin';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
-import { GlbService } from './glb.service';
 import { renderSuccessPageHtml, renderExpiredPageHtml } from './templates';
 import { UpdateProfileDto } from './update-profile.dto';
 import { JwtService } from '@nestjs/jwt';
@@ -38,7 +36,6 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly appleSignInService: AppleSignInService,
     @Inject('FIREBASE_APP') private firebaseApp: admin.app.App,
-    private readonly glbService: GlbService,
     private readonly jwtService: JwtService,
   ) {}
 
@@ -374,48 +371,6 @@ export class AuthController {
     return this.authService.updateTestPerformance(userId, dto.testId, dto.percentage);
   }
 
-  // zentraler, geschützter GLB-Download-Endpunkt
-  @Get('glb')
-  async getGlb(
-    @Query('file') file: string,
-    @Query('accessToken') accessTokenQuery: string | undefined,
-    @Req() req: Request,
-    @Res() res: Response,
-  ) {
-    this.logger.log(
-      `glb download requested file=${file}, tokenProvided=${accessTokenQuery ? '[q]' : '[no-q]'}`,
-    );
-
-    // Basic validation
-    if (!file || typeof file !== 'string' || !file.toLowerCase().endsWith('.glb')) {
-      this.logger.warn('getGlb: invalid or missing file param');
-      return res.status(400).json({ error: 'Invalid file parameter' });
-    }
-
-    // extract token from query or Authorization header
-    const authHeader = (req.headers && (req.headers['authorization'] as string)) || '';
-    const bearerToken = authHeader?.replace(/^Bearer\s+/i, '') || undefined;
-    const accessToken =
-      (accessTokenQuery && accessTokenQuery.trim()) || (bearerToken && bearerToken.trim());
-
-    if (!accessToken) {
-      this.logger.warn('getGlb: missing access token');
-      return res.status(401).json({ error: 'Missing access token' });
-    }
-
-    try {
-      await this.glbService.validateGlbToken(accessToken, file);
-
-      const safeFile = this.glbService.sanitizeFilePath(file);
-      await this.glbService.streamGlbFromStorage(safeFile, res);
-      return;
-    } catch (err: any) {
-      this.logger.error(`getGlb ERROR: ${err?.message}`);
-      if (err instanceof UnauthorizedException) return res.status(401).json({ error: err.message });
-      if (err instanceof ForbiddenException) return res.status(403).json({ error: err.message });
-      return res.status(500).json({ error: 'Internal server error' });
-    }
-  }
 
   private resolveAccessToken(
     req: Request,
