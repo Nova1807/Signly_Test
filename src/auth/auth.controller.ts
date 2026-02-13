@@ -20,11 +20,11 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import type { Response, Request } from 'express';
 import * as admin from 'firebase-admin';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
-import { AppleAuthGuard } from './guards/apple-auth.guard';
 import { GlbService } from './glb.service';
 import { renderSuccessPageHtml, renderExpiredPageHtml } from './templates';
 import { UpdateProfileDto } from './update-profile.dto';
 import { JwtService } from '@nestjs/jwt';
+import { AppleSignInService } from './apple/apple-signin.service';
 
 @Controller('auth')
 export class AuthController {
@@ -32,6 +32,7 @@ export class AuthController {
 
   constructor(
     private readonly authService: AuthService,
+    private readonly appleSignInService: AppleSignInService,
     @Inject('FIREBASE_APP') private firebaseApp: admin.app.App,
     private readonly glbService: GlbService,
     private readonly jwtService: JwtService,
@@ -173,10 +174,10 @@ export class AuthController {
 
   // Apple OAuth Start
   @Get('apple')
-  @UseGuards(AppleAuthGuard)
-  async appleAuth() {
-    this.logger.log('appleAuth endpoint called');
-    return;
+  async appleAuth(@Res() res: Response) {
+    this.logger.log('appleAuth endpoint called – redirecting to Apple');
+    const authorizeUrl = this.appleSignInService.getAuthorizationUrl();
+    return res.redirect(authorizeUrl);
   }
 
   /**
@@ -184,17 +185,14 @@ export class AuthController {
    * Apple sendet bei "web flow" häufig POST (form-urlencoded) an callbackURL. [page:1]
    */
   @Post('apple/redirect')
-  @UseGuards(AppleAuthGuard)
   async appleAuthRedirect(@Req() req: Request, @Res() res: Response) {
     try {
-      this.logger.log(`appleAuthRedirect(POST) called, user=${JSON.stringify(req.user)}`);
+      this.logger.log(
+        `appleAuthRedirect(POST) called, bodyKeys=${Object.keys(req.body || {}).join(',')}`,
+      );
 
-      const appleUser = req.user as { email: string; name: string; appleId: string };
-
-      if (!appleUser || !appleUser.appleId) {
-        this.logger.error('appleAuthRedirect: No user data from Apple');
-        return res.redirect('signly://auth/error?message=authentication_failed');
-      }
+      const payload = this.appleSignInService.extractCallbackPayload(req);
+      const appleUser = await this.appleSignInService.buildProfileFromPayload(payload);
 
       const { accessToken, refreshToken, loginStreak, longestLoginStreak } =
         await this.authService.loginWithApple(appleUser);
@@ -227,18 +225,15 @@ export class AuthController {
    * Wichtig: NICHT die POST-Methode aufrufen, sondern getrennt laufen lassen.
    */
   @Get('apple/redirect')
-  @UseGuards(AppleAuthGuard)
   async appleAuthRedirectGet(@Req() req: Request, @Res() res: Response) {
     // gleiche Logik wie POST (kopiert, bewusst kein gegenseitiges aufrufen)
     try {
-      this.logger.log(`appleAuthRedirect(GET) called, user=${JSON.stringify(req.user)}`);
+      this.logger.log(
+        `appleAuthRedirect(GET) called, queryKeys=${Object.keys(req.query || {}).join(',')}`,
+      );
 
-      const appleUser = req.user as { email: string; name: string; appleId: string };
-
-      if (!appleUser || !appleUser.appleId) {
-        this.logger.error('appleAuthRedirectGet: No user data from Apple');
-        return res.redirect('signly://auth/error?message=authentication_failed');
-      }
+      const payload = this.appleSignInService.extractCallbackPayload(req);
+      const appleUser = await this.appleSignInService.buildProfileFromPayload(payload);
 
       const { accessToken, refreshToken, loginStreak, longestLoginStreak } =
         await this.authService.loginWithApple(appleUser);

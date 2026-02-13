@@ -10,10 +10,9 @@ import { FirebaseModule } from '../firebase/firebase.module';
 import { EmailAssetsController } from './email-assets.controller';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
-import { AppleStrategy } from './strategies/apple.strategy';
-import { AppleAuthGuard } from './guards/apple-auth.guard';
 import { GlbService } from './glb.service';
 import { MailerService } from './mailer.service';
+import { AppleSignInService } from './apple/apple-signin.service';
 
 @Module({
   imports: [
@@ -29,8 +28,7 @@ import { MailerService } from './mailer.service';
     AuthService,
     GoogleStrategy,
     GoogleAuthGuard,
-    AppleStrategy,
-    AppleAuthGuard,
+    AppleSignInService,
     GlbService,
     MailerService,
   ],
