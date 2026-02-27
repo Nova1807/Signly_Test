@@ -6,6 +6,12 @@ import { MailerService } from '../auth/mailer.service';
 @Injectable()
 export class PasswordResetService {
   private readonly logger = new Logger(PasswordResetService.name);
+  private readonly resetTokenTtlMinutes = Number(
+    process.env.PASSWORD_RESET_TOKEN_TTL_MINUTES ?? 60,
+  );
+  private readonly resetCleanupBatchSize = Number(
+    process.env.PASSWORD_RESET_CLEANUP_BATCH_SIZE ?? 200,
+  );
 
   constructor(
     // FIREBASE_APP wird bereits im Projekt verwendet, wir gehen von derselben Injection aus
@@ -13,12 +19,46 @@ export class PasswordResetService {
     private readonly mailerService: MailerService,
   ) {}
 
+  private async cleanupExpiredPasswordResetTokens(): Promise<void> {
+    const firestore = this.firebaseApp.firestore();
+    const now = admin.firestore.Timestamp.fromDate(new Date());
+    let deleted = 0;
+
+    while (true) {
+      const snapshot = await firestore
+        .collection('passwordResets')
+        .where('expiresAt', '<=', now)
+        .limit(this.resetCleanupBatchSize)
+        .get();
+
+      if (snapshot.empty) {
+        break;
+      }
+
+      const batch = firestore.batch();
+      snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+      await batch.commit();
+
+      deleted += snapshot.size;
+      if (snapshot.size < this.resetCleanupBatchSize) {
+        break;
+      }
+    }
+
+    if (deleted > 0) {
+      this.logger.log(
+        `cleanupExpiredPasswordResetTokens: deleted ${deleted} expired password reset docs`,
+      );
+    }
+  }
+
   // 1) Neuen Reset-Token erzeugen und Mail versenden
   async requestPasswordReset(email: string) {
     if (!email) {
       throw new BadRequestException('Email ist erforderlich');
     }
 
+    await this.cleanupExpiredPasswordResetTokens();
     const firestore = this.firebaseApp.firestore();
 
     // User anhand der E-Mail finden
@@ -55,13 +95,14 @@ export class PasswordResetService {
     // Neuen Token erstellen
     const token = require('crypto').randomBytes(32).toString('hex');
   const createdAt = new Date();
-  // Hinweis: Kein Ablauf mehr, Link bleibt gültig, bis er benutzt wurde
+  const expiresAt = new Date(createdAt.getTime() + this.resetTokenTtlMinutes * 60 * 1000);
 
     await firestore.collection('passwordResets').doc(token).set({
       userId,
       email,
       name,
   createdAt: admin.firestore.Timestamp.fromDate(createdAt),
+  expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
   used: false,
     });
 
@@ -486,6 +527,7 @@ export class PasswordResetService {
       throw new BadRequestException('Token und Passwort sind erforderlich');
     }
 
+    await this.cleanupExpiredPasswordResetTokens();
     const firestore = this.firebaseApp.firestore();
     const docRef = firestore.collection('passwordResets').doc(token);
     const doc = await docRef.get();
@@ -499,7 +541,11 @@ export class PasswordResetService {
       throw new BadRequestException('Ungültiger oder abgelaufener Link');
     }
 
-  // Kein Ablauf mehr: Token ist nur ungültig, wenn es nicht existiert oder bereits benutzt wurde
+    const expiresAt: admin.firestore.Timestamp | undefined = data.expiresAt;
+    if (!expiresAt || expiresAt.toDate().getTime() < Date.now()) {
+      await docRef.delete().catch(() => {});
+      throw new BadRequestException('Ungültiger oder abgelaufener Link');
+    }
 
     const userId = data.userId as string;
     const userRef = firestore.collection('users').doc(userId);
@@ -513,8 +559,8 @@ export class PasswordResetService {
 
     await userRef.update({ password: hashedPassword });
 
-    // Token als verwendet markieren (oder löschen)
-    await docRef.update({ used: true });
+    // Token entfernen
+    await docRef.delete().catch(() => {});
 
     // JSON-Response für das Formular, damit kein Fehler im Frontend angezeigt wird
     return {

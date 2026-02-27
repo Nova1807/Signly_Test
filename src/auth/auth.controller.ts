@@ -302,6 +302,17 @@ export class AuthController {
     return this.authService.updateProfile(userId, profileDto);
   }
 
+  @Get('profile/about')
+  async getProfileAbout(
+    @Query('accessToken') accessTokenQuery: string | undefined,
+    @Req() req: Request,
+  ) {
+    this.logger.log('getProfileAbout called');
+    const accessToken = this.resolveAccessToken(req, accessTokenQuery);
+    const userId = this.resolveUserIdFromToken(accessToken);
+    return this.authService.getProfileAbout(userId);
+  }
+
   // GET current login streaks for the authenticated user
   @Get('streak')
   async getStreak(

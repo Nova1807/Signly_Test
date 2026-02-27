@@ -40,6 +40,9 @@ export class AuthService {
   private readonly avatarSignedUrlExpiresInMs = Number(
     process.env.AVATAR_SIGNED_URL_TTL_MS ?? 5 * 60 * 1000,
   );
+  private readonly verificationCleanupBatchSize = Number(
+    process.env.EMAIL_VERIFICATION_CLEANUP_BATCH_SIZE ?? 200,
+  );
 
   // words.json ist ein reines Array von Strings
   private readonly forbiddenWords: string[] = (words as string[])
@@ -382,6 +385,37 @@ export class AuthService {
     return { userDoc, userRef };
   }
 
+  private async cleanupExpiredEmailVerificationTokens(): Promise<void> {
+    const firestore = this.firebaseApp.firestore();
+    const nowTimestamp = admin.firestore.Timestamp.fromDate(new Date());
+    let totalDeleted = 0;
+
+    while (true) {
+      const snapshot = await firestore
+        .collection('emailVerifications')
+        .where('expiresAt', '<=', nowTimestamp)
+        .limit(this.verificationCleanupBatchSize)
+        .get();
+
+      if (snapshot.empty) {
+        break;
+      }
+
+      const batch = firestore.batch();
+      snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+      await batch.commit();
+      totalDeleted += snapshot.size;
+
+      if (snapshot.size < this.verificationCleanupBatchSize) {
+        break;
+      }
+    }
+
+    if (totalDeleted > 0) {
+      this.logger.log(`cleanupExpiredEmailVerificationTokens: deleted ${totalDeleted} expired docs`);
+    }
+  }
+
   private async updatePerformanceMatrix(
     userId: string,
     matrixKey: 'lessonPerformanceMatrix' | 'testPerformanceMatrix',
@@ -688,8 +722,18 @@ export class AuthService {
     return { success: true };
   }
 
+  async getProfileAbout(userId: string) {
+    const { userDoc } = await this.getUserDocument(userId);
+    const data = userDoc.data() as any;
+    return {
+      name: data?.name ?? '',
+      aboutMe: data?.aboutMe ?? '',
+    };
+  }
+
   async signup(signupData: SignupDto) {
     this.logger.log(`signup start: ${JSON.stringify(signupData)}`);
+    await this.cleanupExpiredEmailVerificationTokens();
 
     const rawNameFromDto =
       (signupData && (signupData as any).name) ||
@@ -921,6 +965,7 @@ export class AuthService {
     this.logger.log(`verifyEmailToken START: token='${token}'`);
 
     const firestore = this.firebaseApp.firestore();
+    await this.cleanupExpiredEmailVerificationTokens();
 
     try {
       const docRef = firestore.collection('emailVerifications').doc(token);
