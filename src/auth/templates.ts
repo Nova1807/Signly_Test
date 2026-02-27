@@ -7,6 +7,7 @@ export function renderSuccessPageHtml(name: string) {
   const baseUrl = 'https://backend.signly.at';
   const assetsBaseUrl = `${baseUrl}/email-assets`;
   const appIconUrl = `${assetsBaseUrl}/signly_App_Icon.png`;
+  const heroIllustrationUrl = 'https://storage.googleapis.com/signlydaten/schlange/schlange.png';
 
   return `
       <!DOCTYPE html>
@@ -268,7 +269,7 @@ export function renderSuccessPageHtml(name: string) {
             <section class="hero">
               <div class="hero-illustration" aria-hidden="true">
                 <img
-                  src="${assetsBaseUrl}/Maskotchen.png"
+                  src="${heroIllustrationUrl}"
                   alt="Signly Maskottchen"
                   style="max-width: 160px; width: 100%; height: auto; display: block;"
                   loading="eager"
