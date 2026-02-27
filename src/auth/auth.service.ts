@@ -15,6 +15,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { MailerService } from './mailer.service';
 import words from './words.json';
 import { UpdateProfileDto } from './update-profile.dto';
+import { GoogleAuth } from 'google-auth-library';
 export type AvatarUploadFile = {
   buffer: Buffer;
   mimetype: string;
@@ -43,6 +44,13 @@ export class AuthService {
   private readonly verificationCleanupBatchSize = Number(
     process.env.EMAIL_VERIFICATION_CLEANUP_BATCH_SIZE ?? 200,
   );
+  private readonly refreshTokenCleanupBatchSize = Number(
+    process.env.REFRESH_TOKEN_CLEANUP_BATCH_SIZE ?? 500,
+  );
+  private readonly googleAuth = new GoogleAuth({
+    scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+  });
+  private readonly riskySafeSearchLikelihoods = new Set(['LIKELY', 'VERY_LIKELY']);
 
   // words.json ist ein reines Array von Strings
   private readonly forbiddenWords: string[] = (words as string[])
@@ -332,6 +340,59 @@ export class AuthService {
     }
 
     return { buffer: file.buffer, mimeType };
+  }
+
+  private async ensureAvatarIsSafe(bucketName: string, filePath: string) {
+    const gcsUri = `gs://${bucketName}/${filePath}`;
+    try {
+      const client = await this.googleAuth.getClient();
+      const response = await client.request<{
+        responses?: Array<{
+          safeSearchAnnotation?: {
+            adult?: string;
+            violence?: string;
+            racy?: string;
+            medical?: string;
+          };
+        }>;
+      }>({
+        url: 'https://vision.googleapis.com/v1/images:annotate',
+        method: 'POST',
+        data: {
+          requests: [
+            {
+              image: { source: { imageUri: gcsUri } },
+              features: [{ type: 'SAFE_SEARCH_DETECTION' }],
+            },
+          ],
+        },
+      });
+
+      const annotation = response.data.responses?.[0]?.safeSearchAnnotation;
+      if (!annotation) {
+        return;
+      }
+
+      const flagged =
+        this.riskySafeSearchLikelihoods.has(annotation.adult ?? '') ||
+        this.riskySafeSearchLikelihoods.has(annotation.violence ?? '') ||
+        this.riskySafeSearchLikelihoods.has(annotation.racy ?? '');
+
+      if (flagged) {
+        throw new BadRequestException(
+          'Avatar wurde abgelehnt (bitte ein anderes Bild wählen)',
+        );
+      }
+    } catch (err) {
+      if (err instanceof BadRequestException) {
+        throw err;
+      }
+      this.logger.error(
+        `ensureAvatarIsSafe: Vision API error for ${gcsUri}: ${err?.message}`,
+        err?.stack,
+      );
+      throw new BadRequestException('Avatar konnte nicht geprüft werden');
+    }
   }
 
   private async ensureUserCollections(
@@ -655,6 +716,28 @@ export class AuthService {
     }
   }
 
+  async downloadAvatar(userId: string) {
+    const { userDoc } = await this.getUserDocument(userId);
+    const data = userDoc.data() as any;
+    const avatarPath = data?.avatarPath;
+
+    if (!avatarPath) {
+      throw new BadRequestException('Kein Avatar vorhanden');
+    }
+
+    const bucket = this.getStorageBucket();
+    const fileRef = bucket.file(avatarPath);
+    const [exists] = await fileRef.exists();
+    if (!exists) {
+      throw new BadRequestException('Avatar wurde nicht gefunden');
+    }
+
+    return {
+      stream: fileRef.createReadStream(),
+      mimeType: data?.avatarMimeType ?? 'application/octet-stream',
+    };
+  }
+
   async uploadAvatar(userId: string, file?: AvatarUploadFile) {
     const { buffer, mimeType } = this.sanitizeAvatarFile(file);
     const { userDoc, userRef } = await this.getUserDocument(userId);
@@ -669,6 +752,17 @@ export class AuthService {
       contentType: mimeType,
       metadata: { cacheControl: 'private, max-age=0' },
     });
+
+    try {
+      await this.ensureAvatarIsSafe(bucket.name, newPath);
+    } catch (err) {
+      await fileRef.delete({ ignoreNotFound: true }).catch((deleteErr) => {
+        this.logger.warn(
+          `uploadAvatar: failed to delete rejected avatar ${newPath}: ${deleteErr?.message}`,
+        );
+      });
+      throw err;
+    }
 
     if (previousPath) {
       try {
