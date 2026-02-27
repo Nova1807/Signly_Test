@@ -504,6 +504,20 @@ export class AuthController {
     return this.authService.deleteAvatar(userId);
   }
 
+  @Get('profile/avatar/raw')
+  async getAvatarRaw(
+    @Query('accessToken') accessTokenQuery: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    this.logger.log('getAvatarRaw called');
+    const accessToken = this.resolveAccessToken(req, accessTokenQuery);
+    const userId = this.resolveUserIdFromToken(accessToken);
+    const { stream, mimeType } = await this.authService.downloadAvatar(userId);
+    res.setHeader('Content-Type', mimeType || 'application/octet-stream');
+    return stream.pipe(res);
+  }
+
 
   private resolveAccessToken(
     req: Request,
