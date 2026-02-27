@@ -6,7 +6,7 @@ export function renderSuccessPageHtml(name: string) {
 
   const baseUrl = 'https://backend.signly.at';
   const assetsBaseUrl = `${baseUrl}/email-assets`;
-  const appIconUrl = 'https://storage.googleapis.com/signlydaten/schlange/signly_App_Icon.png';
+  const appIconUrl = `${assetsBaseUrl}/signly_App_Icon.png`;
 
   return `
       <!DOCTYPE html>
@@ -248,7 +248,7 @@ export function renderSuccessPageHtml(name: string) {
             <header class="card-header">
               <div class="logo">
                 <img
-                  src="https://storage.googleapis.com/signlydaten/schlange/Signly_logo_color_flatt2.png"
+                  src="${assetsBaseUrl}/Logo.png"
                   alt="Signly Logo"
                   style="height: 36px; width: auto;"
                   loading="eager"
@@ -268,7 +268,7 @@ export function renderSuccessPageHtml(name: string) {
             <section class="hero">
               <div class="hero-illustration" aria-hidden="true">
                 <img
-                  src="https://storage.googleapis.com/signlydaten/schlange/Maskotchen.png"
+                  src="${assetsBaseUrl}/Maskotchen.png"
                   alt="Signly Maskottchen"
                   style="max-width: 160px; width: 100%; height: auto; display: block;"
                   loading="eager"
@@ -404,7 +404,7 @@ export function renderSuccessPageHtml(name: string) {
 export function renderExpiredPageHtml() {
   const baseUrl = 'https://backend.signly.at';
   const assetsBaseUrl = `${baseUrl}/email-assets`;
-  const appIconUrl = 'https://storage.googleapis.com/signlydaten/schlange/signly_App_Icon.png';
+  const appIconUrl = `${assetsBaseUrl}/signly_App_Icon.png`;
 
   return `
       <!DOCTYPE html>
@@ -630,7 +630,7 @@ export function renderExpiredPageHtml() {
             <header class="card-header">
               <div class="logo">
                 <img
-                  src="https://storage.googleapis.com/signlydaten/schlange/Signly_logo_color_flatt2.png"
+                  src="${assetsBaseUrl}/Logo.png"
                   alt="Signly Logo"
                   style="height: 36px; width: auto;"
                   loading="eager"
@@ -650,7 +650,7 @@ export function renderExpiredPageHtml() {
             <section class="hero">
               <div class="hero-illustration" aria-hidden="true">
                 <img
-                  src="https://storage.googleapis.com/signlydaten/schlange/SchlangeBoese.png"
+                  src="${assetsBaseUrl}/SchlangeBoese.png"
                   alt="Signly Maskottchen"
                   style="max-width: 160px; width: 100%; height: auto; display: block;"
                   loading="eager"

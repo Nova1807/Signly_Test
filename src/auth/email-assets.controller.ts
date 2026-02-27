@@ -10,6 +10,10 @@ export class EmailAssetsController {
         'https://storage.googleapis.com/signlydaten/schlange/Signly_logo_color_flatt2.png',
       'Maskotchen.png':
         'https://storage.googleapis.com/signlydaten/schlange/Maskotchen.png',
+      'signly_App_Icon.png':
+        'https://storage.googleapis.com/signlydaten/schlange/signly_App_Icon.png',
+      'SchlangeBoese.png':
+        'https://storage.googleapis.com/signlydaten/schlange/SchlangeBoese.png',
     };
 
     const targetUrl = assetMap[fileName];
