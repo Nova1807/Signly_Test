@@ -11,6 +11,9 @@ import {
   Req,
   UnauthorizedException,
   BadRequestException,
+  Delete,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
@@ -26,7 +29,18 @@ import { AppleSignInService } from './apple/apple-signin.service';
 import {
   UpdateLessonPerformanceDto,
   UpdateTestPerformanceDto,
+  UpdateLessonPerformanceMatrixDto,
+  UpdateTestPerformanceMatrixDto,
 } from './dto/update-performance.dto';
+import {
+  UpdateDictionaryDto,
+  UpdateFavoriteGesturesDto,
+} from './dto/update-collections.dto';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import type { AvatarUploadFile } from './auth.service';
+
+const AVATAR_UPLOAD_MAX_BYTES = Number(process.env.AVATAR_MAX_BYTES ?? 5 * 1024 * 1024);
 
 @Controller('auth')
 export class AuthController {
@@ -347,6 +361,19 @@ export class AuthController {
     return this.authService.updateLessonPerformance(userId, dto.lessonId, dto.percentage);
   }
 
+  @Post('lessons/performance/bulk')
+  async setLessonPerformanceMatrix(
+    @Body() dto: UpdateLessonPerformanceMatrixDto,
+    @Req() req: Request,
+  ) {
+    this.logger.log(
+      `setLessonPerformanceMatrix called with ${dto.entries?.length ?? 0} entries`,
+    );
+    const accessToken = this.resolveAccessToken(req, undefined, dto.accessToken);
+    const userId = this.resolveUserIdFromToken(accessToken);
+    return this.authService.setLessonPerformanceMatrix(userId, dto.entries ?? []);
+  }
+
   @Get('tests/performance')
   async getTestPerformance(
     @Query('accessToken') accessTokenQuery: string | undefined,
@@ -369,6 +396,101 @@ export class AuthController {
     const accessToken = this.resolveAccessToken(req, undefined, dto.accessToken);
     const userId = this.resolveUserIdFromToken(accessToken);
     return this.authService.updateTestPerformance(userId, dto.testId, dto.percentage);
+  }
+
+  @Post('tests/performance/bulk')
+  async setTestPerformanceMatrix(
+    @Body() dto: UpdateTestPerformanceMatrixDto,
+    @Req() req: Request,
+  ) {
+    this.logger.log(`setTestPerformanceMatrix called with ${dto.entries?.length ?? 0} entries`);
+    const accessToken = this.resolveAccessToken(req, undefined, dto.accessToken);
+    const userId = this.resolveUserIdFromToken(accessToken);
+    return this.authService.setTestPerformanceMatrix(userId, dto.entries ?? []);
+  }
+
+  @Get('dictionary')
+  async getDictionary(
+    @Query('accessToken') accessTokenQuery: string | undefined,
+    @Req() req: Request,
+  ) {
+    this.logger.log('getDictionary called');
+    const accessToken = this.resolveAccessToken(req, accessTokenQuery);
+    const userId = this.resolveUserIdFromToken(accessToken);
+    return this.authService.getDictionaryEntries(userId);
+  }
+
+  @Post('dictionary')
+  async updateDictionary(@Body() dto: UpdateDictionaryDto, @Req() req: Request) {
+    this.logger.log(
+      `updateDictionary called with ${dto.dictionaryEntries?.length ?? 0} entries`,
+    );
+    const accessToken = this.resolveAccessToken(req, undefined, dto.accessToken);
+    const userId = this.resolveUserIdFromToken(accessToken);
+    return this.authService.updateDictionaryEntries(userId, dto.dictionaryEntries ?? []);
+  }
+
+  @Get('favorite-gestures')
+  async getFavoriteGestures(
+    @Query('accessToken') accessTokenQuery: string | undefined,
+    @Req() req: Request,
+  ) {
+    this.logger.log('getFavoriteGestures called');
+    const accessToken = this.resolveAccessToken(req, accessTokenQuery);
+    const userId = this.resolveUserIdFromToken(accessToken);
+    return this.authService.getFavoriteGestures(userId);
+  }
+
+  @Post('favorite-gestures')
+  async updateFavoriteGestures(
+    @Body() dto: UpdateFavoriteGesturesDto,
+    @Req() req: Request,
+  ) {
+    this.logger.log(
+      `updateFavoriteGestures called with ${dto.favoriteGestures?.length ?? 0} entries`,
+    );
+    const accessToken = this.resolveAccessToken(req, undefined, dto.accessToken);
+    const userId = this.resolveUserIdFromToken(accessToken);
+    return this.authService.updateFavoriteGestures(userId, dto.favoriteGestures ?? []);
+  }
+
+  @Get('profile/avatar')
+  async getAvatar(
+    @Query('accessToken') accessTokenQuery: string | undefined,
+    @Req() req: Request,
+  ) {
+    this.logger.log('getAvatar called');
+    const accessToken = this.resolveAccessToken(req, accessTokenQuery);
+    const userId = this.resolveUserIdFromToken(accessToken);
+    return this.authService.getAvatar(userId);
+  }
+
+  @Post('profile/avatar')
+  @UseInterceptors(
+    FileInterceptor('avatar', {
+      storage: memoryStorage(),
+      limits: { fileSize: AVATAR_UPLOAD_MAX_BYTES },
+    }),
+  )
+  async uploadAvatar(
+    @UploadedFile() file: AvatarUploadFile,
+    @Req() req: Request,
+  ) {
+    this.logger.log('uploadAvatar called');
+    const accessToken = this.resolveAccessToken(req);
+    const userId = this.resolveUserIdFromToken(accessToken);
+    return this.authService.uploadAvatar(userId, file);
+  }
+
+  @Delete('profile/avatar')
+  async deleteAvatar(
+    @Query('accessToken') accessTokenQuery: string | undefined,
+    @Req() req: Request,
+  ) {
+    this.logger.log('deleteAvatar called');
+    const accessToken = this.resolveAccessToken(req, accessTokenQuery);
+    const userId = this.resolveUserIdFromToken(accessToken);
+    return this.authService.deleteAvatar(userId);
   }
 
 

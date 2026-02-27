@@ -124,7 +124,7 @@ export class MailerService {
                 E-Mail-Adresse bestätigen${name ? `, ${name}` : ``}
               </h1>
               <p style="margin:10px 0 0; font-size:14px; line-height:1.65; color:#3b4a5a;">
-                Fast geschafft! Bitte bestätige deine E-Mail-Adresse, damit dein Signly-Account aktiviert werden kann.
+                Fast geschafft! Bitte bestätige deine E-Mail-Adresse, damit dein Signly Account aktiviert werden kann.
               </p>
             </td>
           </tr>
@@ -329,8 +329,7 @@ export class MailerService {
                 Passwort zurücksetzen
               </h1>
               <p style="margin:10px 0 0; font-size:14px; line-height:1.65; color:#3b4a5a;">
-                Du kannst hier ein neues Passwort für deinen Signly-Account festlegen.
-                Der Link ist <strong>1 Stunde</strong> gültig.
+                Setze hier ein neues Passwort für deinen Signly Account.
               </p>
             </td>
           </tr>

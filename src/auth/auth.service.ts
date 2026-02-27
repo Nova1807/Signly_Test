@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { SignupDto } from './dto/signup.dto';
 import * as admin from 'firebase-admin';
+import 'firebase-admin/storage';
 import * as bcrypt from 'bcrypt';
 import { LoginDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
@@ -14,6 +15,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { MailerService } from './mailer.service';
 import words from './words.json';
 import { UpdateProfileDto } from './update-profile.dto';
+export type AvatarUploadFile = {
+  buffer: Buffer;
+  mimetype: string;
+  size: number;
+};
 
 @Injectable()
 export class AuthService {
@@ -28,8 +34,12 @@ export class AuthService {
   );
   private readonly lessonIdSet = new Set(this.lessonIds);
   private readonly testIdSet = new Set(this.testIds);
-  private readonly lessonBlueprint: number[][] = this.lessonIds.map((id) => [id, 0]);
-  private readonly testBlueprint: number[][] = this.testIds.map((id) => [id, 0]);
+  private readonly maxAvatarBytes = Number(process.env.AVATAR_MAX_BYTES ?? 5 * 1024 * 1024);
+  private readonly avatarFolder = process.env.AVATAR_FOLDER || 'avatars';
+  private readonly allowedAvatarMimeTypes = new Set(['image/png', 'image/jpeg', 'image/webp']);
+  private readonly avatarSignedUrlExpiresInMs = Number(
+    process.env.AVATAR_SIGNED_URL_TTL_MS ?? 5 * 60 * 1000,
+  );
 
   // words.json ist ein reines Array von Strings
   private readonly forbiddenWords: string[] = (words as string[])
@@ -121,72 +131,241 @@ export class AuthService {
     return [];
   }
 
-  private normalizePerformanceMatrix(value: any): number[][] {
-    if (!Array.isArray(value)) return [];
-    const normalized: number[][] = [];
-    for (const entry of value) {
-      if (Array.isArray(entry) && entry.length >= 2) {
-        const lessonIndex = Number(entry[0]);
-        const percentage = Number(entry[1]);
-        if (Number.isFinite(lessonIndex) && Number.isFinite(percentage)) {
-          normalized.push([lessonIndex, Math.max(0, Math.min(100, percentage))]);
-        }
-      }
+  private clampPercentage(value: number): number {
+    if (!Number.isFinite(value)) {
+      return 0;
     }
-    return normalized;
+    return Math.max(0, Math.min(100, value));
   }
 
-  private mergeWithBlueprint(matrix: number[][], blueprint: number[][]): number[][] {
-    const merged = new Map<number, number>();
-    for (const [id, percentage] of blueprint) {
-      merged.set(id, percentage);
+  private getMatrixKey(kind: 'lesson' | 'test'): 'lessonPerformanceMatrix' | 'testPerformanceMatrix' {
+    return kind === 'lesson' ? 'lessonPerformanceMatrix' : 'testPerformanceMatrix';
+  }
+
+  private getAllowedIdSet(kind: 'lesson' | 'test'): Set<number> | undefined {
+    const source = kind === 'lesson' ? this.lessonIdSet : this.testIdSet;
+    return source.size > 0 ? source : undefined;
+  }
+
+  private normalizePerformanceMatrixInput(
+    value: any,
+    kind: 'lesson' | 'test',
+    strict = false,
+  ): number[][] {
+    const allowedSet = this.getAllowedIdSet(kind);
+
+    if (!Array.isArray(value)) {
+      if (strict && value !== undefined) {
+        throw new BadRequestException(
+          kind === 'lesson'
+            ? 'lessonPerformanceMatrix muss ein Array sein'
+            : 'testPerformanceMatrix muss ein Array sein',
+        );
+      }
+      return [];
     }
-    for (const [id, percentage] of matrix) {
-      const clamped = Math.max(0, Math.min(100, percentage));
-      merged.set(id, clamped);
+
+    const sanitized = new Map<number, number>();
+
+    for (const rawEntry of value) {
+      if (rawEntry == null) {
+        if (strict) {
+          throw new BadRequestException('Performance-Einträge dürfen nicht leer sein');
+        }
+        continue;
+      }
+
+      let idValue: any;
+      let percentageValue: any;
+
+      if (Array.isArray(rawEntry) && rawEntry.length >= 2) {
+        [idValue, percentageValue] = rawEntry;
+      } else if (typeof rawEntry === 'object') {
+        idValue =
+          (rawEntry as any).lessonId ??
+          (rawEntry as any).testId ??
+          (rawEntry as any).id ??
+          (rawEntry as any).index;
+        percentageValue =
+          (rawEntry as any).percentage ?? (rawEntry as any).value ?? (rawEntry as any).progress;
+      } else {
+        if (strict) {
+          throw new BadRequestException(
+            kind === 'lesson'
+              ? 'lessonPerformanceMatrix erwartet lessonId & percentage'
+              : 'testPerformanceMatrix erwartet testId & percentage',
+          );
+        }
+        continue;
+      }
+
+      const numericId = Number(idValue);
+      const numericPercentage = Number(percentageValue);
+
+      if (!Number.isFinite(numericId) || !Number.isFinite(numericPercentage)) {
+        if (strict) {
+          throw new BadRequestException(
+            kind === 'lesson'
+              ? 'lessonPerformanceMatrix benötigt numerische lessonId & percentage'
+              : 'testPerformanceMatrix benötigt numerische testId & percentage',
+          );
+        }
+        continue;
+      }
+
+      const normalizedId = Math.floor(numericId);
+      if (allowedSet && !allowedSet.has(normalizedId)) {
+        const message = kind === 'lesson' ? 'Unknown lessonId' : 'Unknown testId';
+        if (strict) {
+          throw new BadRequestException(message);
+        }
+        continue;
+      }
+
+      sanitized.set(normalizedId, this.clampPercentage(numericPercentage));
     }
-    return Array.from(merged.entries())
+
+    return Array.from(sanitized.entries())
       .sort((a, b) => a[0] - b[0])
       .map(([id, percentage]) => [id, percentage]);
   }
 
-  private getInitialMatrix(kind: 'lesson' | 'test'): number[][] {
-    const source = kind === 'lesson' ? this.lessonBlueprint : this.testBlueprint;
-    if (!source.length) return [];
-    return source.map(([id, value]) => [id, value]);
+  private arraysEqual(a: any, b: any): boolean {
+    return JSON.stringify(a ?? []) === JSON.stringify(b ?? []);
   }
 
-  private async ensureUserPerformanceMatrices(
+  private normalizeStringArray(value: any): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    const seen = new Set<string>();
+    const normalized: string[] = [];
+    for (const entry of value) {
+      if (typeof entry !== 'string') {
+        continue;
+      }
+      const trimmed = entry.trim();
+      if (!trimmed || seen.has(trimmed)) {
+        continue;
+      }
+      normalized.push(trimmed);
+      seen.add(trimmed);
+    }
+    return normalized;
+  }
+
+  private sanitizeStringArrayInput(value: any, fieldName: string): string[] {
+    if (!Array.isArray(value)) {
+      throw new BadRequestException(`${fieldName} muss ein Array aus Strings sein`);
+    }
+    const invalid = value.some((entry) => typeof entry !== 'string');
+    if (invalid) {
+      throw new BadRequestException(`${fieldName} darf nur Strings enthalten`);
+    }
+    return this.normalizeStringArray(value);
+  }
+
+  private getStorageBucket() {
+    return this.firebaseApp.storage().bucket();
+  }
+
+  private detectAvatarExtension(mimeType: string) {
+    if (mimeType === 'image/png') return 'png';
+    if (mimeType === 'image/webp') return 'webp';
+    return 'jpg';
+  }
+
+  private validateAvatarMagicBytes(buffer: Buffer, mimeType: string) {
+    if (mimeType === 'image/png') {
+      return buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47;
+    }
+
+    if (mimeType === 'image/jpeg') {
+      return buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[buffer.length - 2] === 0xff && buffer[buffer.length - 1] === 0xd9;
+    }
+
+    if (mimeType === 'image/webp') {
+      return (
+        buffer[0] === 0x52 && // R
+        buffer[1] === 0x49 && // I
+        buffer[2] === 0x46 && // F
+        buffer[3] === 0x46 && // F
+        buffer[8] === 0x57 && // W
+        buffer[9] === 0x45 && // E
+        buffer[10] === 0x42 && // B
+        buffer[11] === 0x50
+      );
+    }
+
+    return false;
+  }
+
+  private sanitizeAvatarFile(file?: AvatarUploadFile) {
+    if (!file) {
+      throw new BadRequestException('avatar-Datei fehlt');
+    }
+
+    if (!file.buffer || !file.buffer.length) {
+      throw new BadRequestException('avatar-Datei konnte nicht gelesen werden');
+    }
+
+    if (file.buffer.length > this.maxAvatarBytes) {
+      throw new BadRequestException(
+        `Avatar ist zu groß (max ${(this.maxAvatarBytes / (1024 * 1024)).toFixed(1)}MB)`,
+      );
+    }
+
+    const mimeType = (file.mimetype || '').toLowerCase();
+    if (!this.allowedAvatarMimeTypes.has(mimeType)) {
+      throw new BadRequestException('Unterstützte Avatar-Typen: PNG, JPEG, WEBP');
+    }
+
+    if (file.buffer.length < 4) {
+      throw new BadRequestException('Ungültiges Bildformat');
+    }
+
+    if (!this.validateAvatarMagicBytes(file.buffer, mimeType)) {
+      throw new BadRequestException('Ungültiges Bildformat');
+    }
+
+    return { buffer: file.buffer, mimeType };
+  }
+
+  private async ensureUserCollections(
     userDoc: admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot,
   ): Promise<void> {
     const data = userDoc.data();
     if (!data) return;
 
     const updates: Record<string, any> = {};
-    const lessonMatrix = this.normalizePerformanceMatrix(data.lessonPerformanceMatrix);
-    const testMatrix = this.normalizePerformanceMatrix(data.testPerformanceMatrix);
 
-    const mergedLesson = this.mergeWithBlueprint(
-      lessonMatrix,
-      this.lessonBlueprint.length ? this.lessonBlueprint : [],
+    const normalizedLesson = this.normalizePerformanceMatrixInput(
+      data.lessonPerformanceMatrix,
+      'lesson',
     );
-    const mergedTest = this.mergeWithBlueprint(
-      testMatrix,
-      this.testBlueprint.length ? this.testBlueprint : [],
-    );
-
-    if (JSON.stringify(lessonMatrix) !== JSON.stringify(mergedLesson)) {
-      updates.lessonPerformanceMatrix = mergedLesson;
+    if (!this.arraysEqual(data.lessonPerformanceMatrix, normalizedLesson)) {
+      updates.lessonPerformanceMatrix = normalizedLesson;
     }
 
-    if (JSON.stringify(testMatrix) !== JSON.stringify(mergedTest)) {
-      updates.testPerformanceMatrix = mergedTest;
+    const normalizedTest = this.normalizePerformanceMatrixInput(data.testPerformanceMatrix, 'test');
+    if (!this.arraysEqual(data.testPerformanceMatrix, normalizedTest)) {
+      updates.testPerformanceMatrix = normalizedTest;
+    }
+
+    const normalizedDictionary = this.normalizeStringArray(data.dictionaryEntries);
+    if (!this.arraysEqual(data.dictionaryEntries, normalizedDictionary)) {
+      updates.dictionaryEntries = normalizedDictionary;
+    }
+
+    const normalizedFavorites = this.normalizeStringArray(data.favoriteGestures);
+    if (!this.arraysEqual(data.favoriteGestures, normalizedFavorites)) {
+      updates.favoriteGestures = normalizedFavorites;
     }
 
     if (Object.keys(updates).length > 0) {
       await userDoc.ref.update(updates);
       this.logger.log(
-        `ensureUserPerformanceMatrices: backfilled performance matrices for user=${userDoc.id}`,
+        `ensureUserCollections: normalized arrays for user=${userDoc.id}`,
       );
     }
   }
@@ -199,7 +378,7 @@ export class AuthService {
       this.logger.warn(`getUserDocument: user not found userId=${userId}`);
       throw new BadRequestException('User not found');
     }
-    await this.ensureUserPerformanceMatrices(userDoc);
+    await this.ensureUserCollections(userDoc);
     return { userDoc, userRef };
   }
 
@@ -209,8 +388,33 @@ export class AuthService {
     entryId: number,
     percentage: number,
   ): Promise<number[][]> {
+    const kind: 'lesson' | 'test' =
+      matrixKey === 'lessonPerformanceMatrix' ? 'lesson' : 'test';
+    const allowedSet = this.getAllowedIdSet(kind);
+    const normalizedEntryId = Math.floor(Number(entryId));
+
+    if (!Number.isFinite(normalizedEntryId)) {
+      this.logger.warn(
+        `updatePerformanceMatrix: invalid ${kind} id: ${entryId} for userId=${userId}`,
+      );
+      throw new BadRequestException(
+        kind === 'lesson' ? 'lessonId ist ungültig' : 'testId ist ungültig',
+      );
+    }
+
+    if (allowedSet && !allowedSet.has(normalizedEntryId)) {
+      this.logger.warn(
+        `updatePerformanceMatrix: entryId ${normalizedEntryId} not allowed for ${matrixKey}`,
+      );
+      throw new BadRequestException(
+        matrixKey === 'lessonPerformanceMatrix'
+          ? 'Unknown lessonId'
+          : 'Unknown testId',
+      );
+    }
+
     const firestore = this.firebaseApp.firestore();
-    const clampedPercentage = Math.max(0, Math.min(100, percentage));
+    const clampedPercentage = this.clampPercentage(percentage);
     const userRef = firestore.collection('users').doc(userId);
 
     const updatedMatrix = await firestore.runTransaction(async (tx) => {
@@ -221,56 +425,65 @@ export class AuthService {
       }
 
       const data = userSnap.data() || {};
-      const matrix = this.normalizePerformanceMatrix(data[matrixKey]);
-      const allowedSet =
-        matrixKey === 'lessonPerformanceMatrix' ? this.lessonIdSet : this.testIdSet;
-
-      if (allowedSet.size > 0 && !allowedSet.has(entryId)) {
-        this.logger.warn(
-          `updatePerformanceMatrix: entryId ${entryId} not allowed for ${matrixKey}`,
-        );
-        throw new BadRequestException(
-          matrixKey === 'lessonPerformanceMatrix'
-            ? 'Unknown lessonId'
-            : 'Unknown testId',
-        );
-      }
-
-      const existingIndex = matrix.findIndex(([id]) => id === entryId);
-
-      if (existingIndex >= 0) {
-        matrix[existingIndex][1] = clampedPercentage;
-      } else {
-        matrix.push([entryId, clampedPercentage]);
-        matrix.sort((a, b) => a[0] - b[0]);
-      }
-
-      const blueprint =
-        matrixKey === 'lessonPerformanceMatrix' ? this.lessonBlueprint : this.testBlueprint;
-
-      const merged = this.mergeWithBlueprint(matrix, blueprint.length ? blueprint : []);
+      const matrix = this.normalizePerformanceMatrixInput(data[matrixKey], kind);
+      const next = this.mergePerformanceEntry(matrix, normalizedEntryId, clampedPercentage);
 
       tx.update(userRef, {
-        [matrixKey]: merged,
+        [matrixKey]: next,
       });
 
-      return merged;
+      return next;
     });
 
     this.logger.log(
-      `updatePerformanceMatrix: updated ${matrixKey} for userId=${userId}, entryId=${entryId}, percentage=${clampedPercentage}`,
+      `updatePerformanceMatrix: updated ${matrixKey} for userId=${userId}, entryId=${normalizedEntryId}, percentage=${clampedPercentage}`,
     );
 
     return updatedMatrix;
+  }
+
+  private mergePerformanceEntry(matrix: number[][], entryId: number, percentage: number) {
+    const next = matrix.map(([id, value]) => [id, value]);
+    const existingIndex = next.findIndex(([id]) => id === entryId);
+
+    if (existingIndex >= 0) {
+      next[existingIndex][1] = percentage;
+    } else {
+      next.push([entryId, percentage]);
+    }
+
+    next.sort((a, b) => a[0] - b[0]);
+    return next;
+  }
+
+  private async replacePerformanceMatrix(
+    userId: string,
+    kind: 'lesson' | 'test',
+    entries: { id: number; percentage: number }[],
+  ): Promise<number[][]> {
+    const matrixKey = this.getMatrixKey(kind);
+    const payload = entries.map((entry) => [entry.id, entry.percentage]);
+    const normalized = this.normalizePerformanceMatrixInput(payload, kind, true);
+    const { userRef } = await this.getUserDocument(userId);
+
+    await userRef.update({
+      [matrixKey]: normalized,
+    });
+
+    this.logger.log(
+      `replacePerformanceMatrix: replaced ${matrixKey} for userId=${userId} with ${normalized.length} entries`,
+    );
+
+    return normalized;
   }
 
   async getLessonPerformance(userId: string) {
     const { userDoc } = await this.getUserDocument(userId);
     const data = userDoc.data() as any;
     return {
-      lessonPerformanceMatrix: this.mergeWithBlueprint(
-        this.normalizePerformanceMatrix(data?.lessonPerformanceMatrix),
-        this.lessonBlueprint.length ? this.lessonBlueprint : [],
+      lessonPerformanceMatrix: this.normalizePerformanceMatrixInput(
+        data?.lessonPerformanceMatrix,
+        'lesson',
       ),
     };
   }
@@ -289,9 +502,9 @@ export class AuthService {
     const { userDoc } = await this.getUserDocument(userId);
     const data = userDoc.data() as any;
     return {
-      testPerformanceMatrix: this.mergeWithBlueprint(
-        this.normalizePerformanceMatrix(data?.testPerformanceMatrix),
-        this.testBlueprint.length ? this.testBlueprint : [],
+      testPerformanceMatrix: this.normalizePerformanceMatrixInput(
+        data?.testPerformanceMatrix,
+        'test',
       ),
     };
   }
@@ -304,6 +517,175 @@ export class AuthService {
       percentage,
     );
     return { testPerformanceMatrix };
+  }
+
+  async setLessonPerformanceMatrix(
+    userId: string,
+    entries: { lessonId: number; percentage: number }[],
+  ) {
+    const payload = entries.map((entry) => ({
+      id: entry.lessonId,
+      percentage: entry.percentage,
+    }));
+    const lessonPerformanceMatrix = await this.replacePerformanceMatrix(
+      userId,
+      'lesson',
+      payload,
+    );
+    return { lessonPerformanceMatrix };
+  }
+
+  async setTestPerformanceMatrix(
+    userId: string,
+    entries: { testId: number; percentage: number }[],
+  ) {
+    const payload = entries.map((entry) => ({
+      id: entry.testId,
+      percentage: entry.percentage,
+    }));
+    const testPerformanceMatrix = await this.replacePerformanceMatrix(userId, 'test', payload);
+    return { testPerformanceMatrix };
+  }
+
+  async getDictionaryEntries(userId: string) {
+    const { userDoc } = await this.getUserDocument(userId);
+    const data = userDoc.data() as any;
+    return {
+      dictionaryEntries: this.normalizeStringArray(data?.dictionaryEntries),
+    };
+  }
+
+  async updateDictionaryEntries(userId: string, entries: string[]) {
+    const sanitized = this.sanitizeStringArrayInput(entries, 'dictionaryEntries');
+    const { userRef } = await this.getUserDocument(userId);
+    await userRef.update({ dictionaryEntries: sanitized });
+    this.logger.log(`updateDictionaryEntries: stored ${sanitized.length} entries for ${userId}`);
+    return { dictionaryEntries: sanitized };
+  }
+
+  async getFavoriteGestures(userId: string) {
+    const { userDoc } = await this.getUserDocument(userId);
+    const data = userDoc.data() as any;
+    return {
+      favoriteGestures: this.normalizeStringArray(data?.favoriteGestures),
+    };
+  }
+
+  async updateFavoriteGestures(userId: string, entries: string[]) {
+    const sanitized = this.sanitizeStringArrayInput(entries, 'favoriteGestures');
+    const { userRef } = await this.getUserDocument(userId);
+    await userRef.update({ favoriteGestures: sanitized });
+    this.logger.log(
+      `updateFavoriteGestures: stored ${sanitized.length} favorite gestures for ${userId}`,
+    );
+    return { favoriteGestures: sanitized };
+  }
+
+  async getAvatar(userId: string) {
+    const { userDoc } = await this.getUserDocument(userId);
+    const data = userDoc.data() as any;
+    const avatarPath = data?.avatarPath;
+    if (!avatarPath) {
+      return {
+        avatarUrl: null,
+        avatarMimeType: null,
+        avatarUpdatedAt: data?.avatarUpdatedAt ?? null,
+      };
+    }
+
+    const bucket = this.getStorageBucket();
+    const fileRef = bucket.file(avatarPath);
+    const expiresAt = Date.now() + this.avatarSignedUrlExpiresInMs;
+
+    try {
+      const [url] = await fileRef.getSignedUrl({
+        action: 'read',
+        expires: expiresAt,
+      });
+
+      return {
+        avatarUrl: url,
+        avatarMimeType: data?.avatarMimeType ?? null,
+        avatarUpdatedAt: data?.avatarUpdatedAt ?? null,
+        expiresAt,
+      };
+    } catch (err: any) {
+      this.logger.warn(
+        `getAvatar: failed to sign URL for ${avatarPath} (${userId}): ${err?.message}`,
+      );
+      return {
+        avatarUrl: null,
+        avatarMimeType: null,
+        avatarUpdatedAt: data?.avatarUpdatedAt ?? null,
+      };
+    }
+  }
+
+  async uploadAvatar(userId: string, file?: AvatarUploadFile) {
+    const { buffer, mimeType } = this.sanitizeAvatarFile(file);
+    const { userDoc, userRef } = await this.getUserDocument(userId);
+    const previousPath = (userDoc.data() as any)?.avatarPath;
+    const extension = this.detectAvatarExtension(mimeType);
+    const newPath = `${this.avatarFolder}/${userId}/${uuidv4()}.${extension}`;
+    const bucket = this.getStorageBucket();
+    const fileRef = bucket.file(newPath);
+
+    await fileRef.save(buffer, {
+      resumable: false,
+      contentType: mimeType,
+      metadata: { cacheControl: 'private, max-age=0' },
+    });
+
+    if (previousPath) {
+      try {
+        await bucket.file(previousPath).delete({ ignoreNotFound: true });
+      } catch (err: any) {
+        this.logger.warn(
+          `uploadAvatar: failed to delete old avatar ${previousPath} for userId=${userId}: ${err?.message}`,
+        );
+      }
+    }
+
+    await userRef.update({
+      avatarPath: newPath,
+      avatarMimeType: mimeType,
+      avatarUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    this.logger.log(
+      `uploadAvatar: stored avatar ${newPath} (${buffer.length} bytes) for userId=${userId}`,
+    );
+
+    return {
+      avatarPath: newPath,
+      avatarMimeType: mimeType,
+    };
+  }
+
+  async deleteAvatar(userId: string) {
+    const { userDoc, userRef } = await this.getUserDocument(userId);
+    const data = userDoc.data() as any;
+    const avatarPath = data?.avatarPath;
+
+    if (avatarPath) {
+      const bucket = this.getStorageBucket();
+      try {
+        await bucket.file(avatarPath).delete({ ignoreNotFound: true });
+      } catch (err: any) {
+        this.logger.warn(
+          `deleteAvatar: failed to delete ${avatarPath} for userId=${userId}: ${err?.message}`,
+        );
+      }
+    }
+
+    await userRef.update({
+      avatarPath: admin.firestore.FieldValue.delete(),
+      avatarMimeType: admin.firestore.FieldValue.delete(),
+      avatarUpdatedAt: admin.firestore.FieldValue.delete(),
+    });
+
+    this.logger.log(`deleteAvatar: removed avatar metadata for userId=${userId}`);
+    return { success: true };
   }
 
   async signup(signupData: SignupDto) {
@@ -428,7 +810,7 @@ export class AuthService {
       }
 
       const userDoc = snapshot.docs[0];
-      await this.ensureUserPerformanceMatrices(userDoc);
+      await this.ensureUserCollections(userDoc);
       const user = userDoc.data() as any;
       this.logger.log(`login: userDoc id=${userDoc.id}, user=${JSON.stringify(user)}`);
 
@@ -611,12 +993,17 @@ export class AuthService {
         name,
         emailVerified: true,
         createdAt: admin.firestore.Timestamp.fromDate(new Date()),
-      loginStreak: 0,
-      longestLoginStreak: 0,
-      lastLoginDate: null,
-      aboutMe: '',
-      lessonPerformanceMatrix: this.getInitialMatrix('lesson'),
-      testPerformanceMatrix: this.getInitialMatrix('test'),
+        loginStreak: 0,
+        longestLoginStreak: 0,
+        lastLoginDate: null,
+        aboutMe: '',
+        lessonPerformanceMatrix: [],
+        testPerformanceMatrix: [],
+        dictionaryEntries: [],
+        favoriteGestures: [],
+        avatarPath: null,
+        avatarMimeType: null,
+        avatarUpdatedAt: null,
       });
 
       this.logger.log(`verifyEmailToken: user created with ID: ${userRef.id}`);
@@ -679,7 +1066,7 @@ export class AuthService {
       const userDoc = googleIdQuery.docs[0];
       const user = userDoc.data() as any;
       userId = userDoc.id;
-      await this.ensureUserPerformanceMatrices(userDoc);
+        await this.ensureUserCollections(userDoc);
 
       const streakData = this.updateLoginStreak(user, now);
 
@@ -704,7 +1091,7 @@ export class AuthService {
         const userDoc = emailQuery.docs[0];
         const user = userDoc.data() as any;
         userId = userDoc.id;
-        await this.ensureUserPerformanceMatrices(userDoc);
+        await this.ensureUserCollections(userDoc);
 
         const streakData = this.updateLoginStreak(user, now);
 
@@ -736,8 +1123,13 @@ export class AuthService {
           password: null,
           createdAt: admin.firestore.Timestamp.fromDate(now),
           aboutMe: '',
-          lessonPerformanceMatrix: this.getInitialMatrix('lesson'),
-          testPerformanceMatrix: this.getInitialMatrix('test'),
+          lessonPerformanceMatrix: [],
+          testPerformanceMatrix: [],
+          dictionaryEntries: [],
+          favoriteGestures: [],
+          avatarPath: null,
+          avatarMimeType: null,
+          avatarUpdatedAt: null,
           ...streakData,
         });
 
@@ -796,7 +1188,7 @@ export class AuthService {
       const userDoc = appleIdQuery.docs[0];
       const user = userDoc.data() as any;
       userId = userDoc.id;
-      await this.ensureUserPerformanceMatrices(userDoc);
+      await this.ensureUserCollections(userDoc);
 
       const streakData = this.updateLoginStreak(user, now);
 
@@ -830,7 +1222,7 @@ export class AuthService {
         const userDoc = emailQuery.docs[0];
         const user = userDoc.data() as any;
         userId = userDoc.id;
-        await this.ensureUserPerformanceMatrices(userDoc);
+        await this.ensureUserCollections(userDoc);
 
         const streakData = this.updateLoginStreak(user, now);
 
@@ -863,8 +1255,13 @@ export class AuthService {
           password: null,
           createdAt: admin.firestore.Timestamp.fromDate(now),
           aboutMe: '',
-          lessonPerformanceMatrix: this.getInitialMatrix('lesson'),
-          testPerformanceMatrix: this.getInitialMatrix('test'),
+          lessonPerformanceMatrix: [],
+          testPerformanceMatrix: [],
+          dictionaryEntries: [],
+          favoriteGestures: [],
+          avatarPath: null,
+          avatarMimeType: null,
+          avatarUpdatedAt: null,
           ...streakData,
         });
 
