@@ -28,6 +28,15 @@ type AppleCallbackPayload = {
   user?: string | Record<string, any>;
 };
 
+type AppleAppPayload = {
+  identityToken?: string;
+  user?: string | Record<string, any>;
+  email?: string;
+  fullName?: string;
+  firstName?: string;
+  lastName?: string;
+};
+
 type AppleProfile = {
   appleId: string;
   email: string;
@@ -104,34 +113,22 @@ export class AppleSignInService {
 
   async buildProfileFromPayload(payload: AppleCallbackPayload): Promise<AppleProfile> {
     const stateData = this.verifyStateToken(payload.state);
-    const idToken = payload.idToken;
+    return this.buildProfileFromIdToken({
+      idToken: payload.idToken,
+      user: payload.user,
+      logSuffix: `stateNonce=${stateData.nonce}`,
+    });
+  }
 
-    if (!idToken) {
-      throw new BadRequestException('Missing id_token from Apple callback');
-    }
-
-    const decoded = await this.verifyAndDecodeIdToken(idToken);
-    const parsedUser = this.parseUserField(payload.user);
-
-    const email = parsedUser.email || decoded.email || '';
-    const name = parsedUser.name || '';
-    const appleId = decoded.sub;
-
-    if (!appleId) {
-      throw new UnauthorizedException('Apple id_token does not contain a subject');
-    }
-
-    this.logger.log(
-      `Verified Apple id_token for appleId=${appleId}, email=${email || 'n/a'}, stateNonce=${
-        stateData.nonce
-      }`,
-    );
-
-    return {
-      appleId,
-      email,
-      name,
-    };
+  async buildProfileFromAppPayload(payload: AppleAppPayload): Promise<AppleProfile> {
+    const fallbackName = this.buildNameFromParts(payload);
+    return this.buildProfileFromIdToken({
+      idToken: payload.identityToken,
+      user: payload.user,
+      fallbackEmail: payload.email,
+      fallbackName,
+      logSuffix: 'app-flow',
+    });
   }
 
   private getClientId(): string {
@@ -206,6 +203,60 @@ export class AppleSignInService {
     return {
       email: parsed.email || '',
       name: nameParts.join(' ').trim(),
+    };
+  }
+
+  private buildNameFromParts(payload: {
+    fullName?: string;
+    firstName?: string;
+    lastName?: string;
+  }): string {
+    const nameParts: string[] = [];
+    if (payload.firstName) {
+      nameParts.push(payload.firstName);
+    }
+    if (payload.lastName) {
+      nameParts.push(payload.lastName);
+    }
+
+    const joined = nameParts.join(' ').trim();
+    if (joined) {
+      return joined;
+    }
+    return payload.fullName?.trim() || '';
+  }
+
+  private async buildProfileFromIdToken(options: {
+    idToken?: string;
+    user?: AppleCallbackPayload['user'];
+    fallbackEmail?: string;
+    fallbackName?: string;
+    logSuffix?: string;
+  }): Promise<AppleProfile> {
+    if (!options.idToken) {
+      throw new BadRequestException('Missing id_token from Apple login');
+    }
+
+    const decoded = await this.verifyAndDecodeIdToken(options.idToken);
+    const parsedUser = this.parseUserField(options.user);
+
+    const email = parsedUser.email || options.fallbackEmail || decoded.email || '';
+    const name = parsedUser.name || options.fallbackName || '';
+    const appleId = decoded.sub;
+
+    if (!appleId) {
+      throw new UnauthorizedException('Apple id_token does not contain a subject');
+    }
+
+    const logSuffix = options.logSuffix ? `, ${options.logSuffix}` : '';
+    this.logger.log(
+      `Verified Apple id_token for appleId=${appleId}, email=${email || 'n/a'}${logSuffix}`,
+    );
+
+    return {
+      appleId,
+      email,
+      name,
     };
   }
 

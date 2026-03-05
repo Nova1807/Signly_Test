@@ -19,6 +19,7 @@ import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { AppleAppLoginDto } from './dto/apple-app-login.dto';
 import type { Response, Request } from 'express';
 import * as admin from 'firebase-admin';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
@@ -193,6 +194,33 @@ export class AuthController {
     this.logger.log('appleAuth endpoint called – redirecting to Apple');
     const authorizeUrl = this.appleSignInService.getAuthorizationUrl();
     return res.redirect(authorizeUrl);
+  }
+
+  /**
+   * Native iOS app hands over the raw identityToken instead of going through the web redirect flow.
+   */
+  @Post('apple/app')
+  async appleAuthFromApp(@Body() dto: AppleAppLoginDto) {
+    try {
+      this.logger.log(
+        `appleAuthFromApp called (mobile flow), hasUser=${dto.user ? 'y' : 'n'}, hasEmail=${
+          dto.email ? 'y' : 'n'
+        }`,
+      );
+
+      const appleUser = await this.appleSignInService.buildProfileFromAppPayload({
+        identityToken: dto.identityToken,
+        user: dto.user,
+        email: dto.email,
+        fullName: dto.fullName,
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+      });
+      return this.authService.loginWithApple(appleUser);
+    } catch (err: any) {
+      this.logger.error(`appleAuthFromApp ERROR: ${err?.message}`, err?.stack);
+      throw err;
+    }
   }
 
   /**
