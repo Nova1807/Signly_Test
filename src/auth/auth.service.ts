@@ -15,6 +15,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { MailerService } from './mailer.service';
 import words from './words.json';
 import { UpdateProfileDto } from './update-profile.dto';
+import sharp from 'sharp';
 export type AvatarUploadFile = {
   buffer: Buffer;
   mimetype: string;
@@ -39,6 +40,15 @@ export class AuthService {
   private readonly allowedAvatarMimeTypes = new Set(['image/png', 'image/jpeg', 'image/webp']);
   private readonly avatarSignedUrlExpiresInMs = Number(
     process.env.AVATAR_SIGNED_URL_TTL_MS ?? 5 * 60 * 1000,
+  );
+  private readonly avatarJpegQuality = this.clampPercentage(
+    Number(process.env.AVATAR_JPEG_QUALITY ?? 80),
+  );
+  private readonly avatarWebpQuality = this.clampPercentage(
+    Number(process.env.AVATAR_WEBP_QUALITY ?? 80),
+  );
+  private readonly avatarPngCompressionLevel = this.clampCompressionLevel(
+    Number(process.env.AVATAR_PNG_COMPRESSION_LEVEL ?? 9),
   );
   private readonly verificationCleanupBatchSize = Number(
     process.env.EMAIL_VERIFICATION_CLEANUP_BATCH_SIZE ?? 200,
@@ -142,6 +152,13 @@ export class AuthService {
       return 0;
     }
     return Math.max(0, Math.min(100, value));
+  }
+
+  private clampCompressionLevel(value: number): number {
+    if (!Number.isFinite(value)) {
+      return 9;
+    }
+    return Math.max(0, Math.min(9, Math.round(value)));
   }
 
   private getMatrixKey(kind: 'lesson' | 'test'): 'lessonPerformanceMatrix' | 'testPerformanceMatrix' {
@@ -335,6 +352,50 @@ export class AuthService {
     }
 
     return { buffer: file.buffer, mimeType };
+  }
+
+  private async prepareAvatarFile(file?: AvatarUploadFile) {
+    const sanitized = this.sanitizeAvatarFile(file);
+    return this.optimizeAvatarBuffer(sanitized.buffer, sanitized.mimeType);
+  }
+
+  private async optimizeAvatarBuffer(buffer: Buffer, mimeType: string) {
+    try {
+      let optimized: Buffer;
+
+      if (mimeType === 'image/png') {
+        optimized = await sharp(buffer, { failOnError: true })
+          .rotate()
+          .png({
+            compressionLevel: this.avatarPngCompressionLevel,
+            adaptiveFiltering: true,
+          })
+          .toBuffer();
+      } else if (mimeType === 'image/webp') {
+        optimized = await sharp(buffer, { failOnError: true })
+          .rotate()
+          .webp({
+            quality: this.avatarWebpQuality,
+            effort: 4,
+          })
+          .toBuffer();
+      } else {
+        optimized = await sharp(buffer, { failOnError: true })
+          .rotate()
+          .jpeg({
+            quality: this.avatarJpegQuality,
+            mozjpeg: true,
+          })
+          .toBuffer();
+      }
+
+      return { buffer: optimized, mimeType };
+    } catch (err: any) {
+      this.logger.warn(
+        `optimizeAvatarBuffer: returning original buffer due to error: ${err?.message}`,
+      );
+      return { buffer, mimeType };
+    }
   }
 
 
@@ -682,7 +743,7 @@ export class AuthService {
   }
 
   async uploadAvatar(userId: string, file?: AvatarUploadFile) {
-    const { buffer, mimeType } = this.sanitizeAvatarFile(file);
+    const { buffer, mimeType } = await this.prepareAvatarFile(file);
     const { userDoc, userRef } = await this.getUserDocument(userId);
     const previousPath = (userDoc.data() as any)?.avatarPath;
     const extension = this.detectAvatarExtension(mimeType);
