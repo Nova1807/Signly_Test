@@ -17,13 +17,13 @@ export type SafeSearchLikelihood =
 
 export type SafeSearchCategory =
   | 'adult'
-  | 'spoof'
   | 'medical'
   | 'violence'
   | 'racy';
 
 interface SafeSearchAnnotation {
   adult?: SafeSearchLikelihood | null;
+  // spoof wird von der eigenen Logik ignoriert, kann aber weiterhin von der API kommen
   spoof?: SafeSearchLikelihood | null;
   medical?: SafeSearchLikelihood | null;
   violence?: SafeSearchLikelihood | null;
@@ -70,7 +70,6 @@ const SAFE_SEARCH_CATEGORIES: SafeSearchCategory[] = [
   'violence',
   'racy',
   'medical',
-  'spoof',
 ];
 
 @Injectable()
@@ -253,8 +252,6 @@ export class ImageModerationService {
         return 'Gewaltdarstellungen';
       case 'medical':
         return 'medizinische oder verletzende Inhalte';
-      case 'spoof':
-        return 'manipulierte Inhalte';
       default:
         return category;
     }

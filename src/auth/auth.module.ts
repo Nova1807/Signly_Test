@@ -20,6 +20,7 @@ import {
 
 const imageModerationDefaults: ImageModerationOptions = {
   enabled: true,
+  // Standard: relativ streng, aber pro Kategorie anpassbar
   defaultThreshold: 'LIKELY',
 };
 

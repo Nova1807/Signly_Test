@@ -581,7 +581,6 @@ export class AuthController {
     @Query('accessToken') accessTokenQuery: string | undefined,
     @Req() req: Request,
   ) {
-    this.logger.log('getBadges called');
     const accessToken = this.resolveAccessToken(req, accessTokenQuery);
     const userId = this.resolveUserIdFromToken(accessToken);
     return this.authService.getBadges(userId);
@@ -592,9 +591,6 @@ export class AuthController {
     @Body() dto: UpdateBadgesDto,
     @Req() req: Request,
   ) {
-    this.logger.log(
-      `updateBadges called with ${dto.badges?.length ?? 0} entries`,
-    );
     const accessToken = this.resolveAccessToken(req, undefined, dto.accessToken);
     const userId = this.resolveUserIdFromToken(accessToken);
     return this.authService.updateBadges(userId, dto.badges ?? []);
@@ -651,6 +647,53 @@ export class AuthController {
     const { stream, mimeType } = await this.authService.downloadAvatar(userId);
     res.setHeader('Content-Type', mimeType || 'application/octet-stream');
     return stream.pipe(res);
+  }
+
+  @Post('friends/request')
+  async sendFriendRequest(
+    @Body('targetUsername') targetUsername: string,
+    @Query('accessToken') accessTokenQuery: string | undefined,
+    @Req() req: Request,
+  ) {
+    this.logger.log('sendFriendRequest called');
+    const accessToken = this.resolveAccessToken(req, accessTokenQuery);
+    const userId = this.resolveUserIdFromToken(accessToken);
+    return this.authService.sendFriendRequest(userId, targetUsername);
+  }
+
+  @Get('friends/requests')
+  async getIncomingFriendRequests(
+    @Query('accessToken') accessTokenQuery: string | undefined,
+    @Req() req: Request,
+  ) {
+    this.logger.log('getIncomingFriendRequests called');
+    const accessToken = this.resolveAccessToken(req, accessTokenQuery);
+    const userId = this.resolveUserIdFromToken(accessToken);
+    return this.authService.getIncomingFriendRequests(userId);
+  }
+
+  @Post('friends/requests/respond')
+  async respondToFriendRequest(
+    @Body('requestId') requestId: string,
+    @Body('accept') accept: boolean,
+    @Query('accessToken') accessTokenQuery: string | undefined,
+    @Req() req: Request,
+  ) {
+    this.logger.log('respondToFriendRequest called');
+    const accessToken = this.resolveAccessToken(req, accessTokenQuery);
+    const userId = this.resolveUserIdFromToken(accessToken);
+    return this.authService.respondToFriendRequest(userId, requestId, accept);
+  }
+
+  @Get('friends')
+  async getFriends(
+    @Query('accessToken') accessTokenQuery: string | undefined,
+    @Req() req: Request,
+  ) {
+    this.logger.log('getFriends called');
+    const accessToken = this.resolveAccessToken(req, accessTokenQuery);
+    const userId = this.resolveUserIdFromToken(accessToken);
+    return this.authService.getFriends(userId);
   }
 
 
