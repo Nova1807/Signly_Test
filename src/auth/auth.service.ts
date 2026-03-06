@@ -298,42 +298,155 @@ export class AuthService {
     return this.normalizeStringArray(value);
   }
 
-  private normalizeBadgesArray(value: any): number[] {
+  private normalizeBadgesMatrix(
+    value: any,
+    strict = false,
+  ): number[][] {
     if (!Array.isArray(value)) {
+      if (strict && value !== undefined) {
+        throw new BadRequestException('badges muss ein zweidimensionales Array sein');
+      }
       return [];
     }
 
-    const normalized: number[] = [];
+    const result = new Map<number, number>();
 
-    for (const entry of value) {
-      const n = Number(entry);
-      if (!Number.isFinite(n)) {
+    // 1) Fallback: alte 1D-Daten [0,1,0,...] -> wir bauen IDs [0..n-1]
+    if (value.length > 0 && !Array.isArray(value[0])) {
+      value.forEach((rawValue: any, index: number) => {
+        const v = Number(rawValue);
+        if (!Number.isFinite(v)) {
+          if (strict) {
+            throw new BadRequestException('badges darf nur 0 oder 1 enthalten');
+          }
+          return;
+        }
+        if (v !== 0 && v !== 1) {
+          if (strict) {
+            throw new BadRequestException('badges darf nur 0 oder 1 enthalten');
+          }
+          return;
+        }
+        result.set(index, v);
+      });
+
+      const sorted = Array.from(result.entries()).sort((a, b) => a[0] - b[0]);
+      const ids = sorted.map(([id]) => id);
+      const states = sorted.map(([, state]) => state);
+      return [ids, states];
+    }
+
+    // 2) Gewünschtes Format: [[id0,id1,...],[s0,s1,...]]
+    if (
+      value.length === 2 &&
+      Array.isArray(value[0]) &&
+      Array.isArray(value[1])
+    ) {
+      const idsRaw = value[0];
+      const statesRaw = value[1];
+
+      if (idsRaw.length !== statesRaw.length) {
+        if (strict) {
+          throw new BadRequestException('badges: Länge von Index- und Wert-Array muss gleich sein');
+        }
+      }
+
+      const len = Math.min(idsRaw.length, statesRaw.length);
+
+      for (let i = 0; i < len; i++) {
+        const idValue = idsRaw[i];
+        const stateValue = statesRaw[i];
+
+        const numericId = Number(idValue);
+        const numericState = Number(stateValue);
+
+        if (!Number.isFinite(numericId) || !Number.isFinite(numericState)) {
+          if (strict) {
+            throw new BadRequestException('badges benötigt numerische badgeId und wert');
+          }
+          continue;
+        }
+
+        const normalizedId = Math.floor(numericId);
+        if (normalizedId < 0) {
+          if (strict) {
+            throw new BadRequestException('badgeId darf nicht negativ sein');
+          }
+          continue;
+        }
+
+        if (numericState !== 0 && numericState !== 1) {
+          if (strict) {
+            throw new BadRequestException('badge-wert darf nur 0 oder 1 sein');
+          }
+          continue;
+        }
+
+        result.set(normalizedId, numericState);
+      }
+
+      const sorted = Array.from(result.entries()).sort((a, b) => a[0] - b[0]);
+      const ids = sorted.map(([id]) => id);
+      const states = sorted.map(([, state]) => state);
+      return [ids, states];
+    }
+
+    // 3) Fallback: array-of-pairs [[id, state], ...] oder Objektform
+    for (const rawEntry of value) {
+      if (rawEntry == null) {
+        if (strict) {
+          throw new BadRequestException('badge-Einträge dürfen nicht leer sein');
+        }
         continue;
       }
-      if (n === 0 || n === 1) {
-        normalized.push(n);
+
+      let idValue: any;
+      let stateValue: any;
+
+      if (Array.isArray(rawEntry) && rawEntry.length >= 2) {
+        [idValue, stateValue] = rawEntry;
+      } else if (typeof rawEntry === 'object') {
+        idValue = (rawEntry as any).badgeId ?? (rawEntry as any).id;
+        stateValue = (rawEntry as any).value ?? (rawEntry as any).state;
+      } else {
+        if (strict) {
+          throw new BadRequestException('badges erwartet [badgeId, wert] oder entsprechende Objekte');
+        }
+        continue;
       }
-    }
 
-    return normalized;
-  }
+      const numericId = Number(idValue);
+      const numericState = Number(stateValue);
 
-  private sanitizeBadgesArrayInput(value: any, fieldName: string): number[] {
-    if (!Array.isArray(value)) {
-      throw new BadRequestException(`${fieldName} muss ein Array aus Zahlen (0 oder 1) sein`);
-    }
-
-    const result: number[] = [];
-
-    for (const entry of value) {
-      const n = Number(entry);
-      if (!Number.isFinite(n) || (n !== 0 && n !== 1)) {
-        throw new BadRequestException(`${fieldName} darf nur 0 oder 1 enthalten`);
+      if (!Number.isFinite(numericId) || !Number.isFinite(numericState)) {
+        if (strict) {
+          throw new BadRequestException('badges benötigt numerische badgeId und wert');
+        }
+        continue;
       }
-      result.push(n);
+
+      const normalizedId = Math.floor(numericId);
+      if (normalizedId < 0) {
+        if (strict) {
+          throw new BadRequestException('badgeId darf nicht negativ sein');
+        }
+        continue;
+      }
+
+      if (numericState !== 0 && numericState !== 1) {
+        if (strict) {
+          throw new BadRequestException('badge-wert darf nur 0 oder 1 sein');
+        }
+        continue;
+      }
+
+      result.set(normalizedId, numericState);
     }
 
-    return result;
+    const sorted = Array.from(result.entries()).sort((a, b) => a[0] - b[0]);
+    const ids = sorted.map(([id]) => id);
+    const states = sorted.map(([, state]) => state);
+    return [ids, states];
   }
 
   private getStorageBucket() {
@@ -478,7 +591,7 @@ export class AuthService {
       updates.favoriteGestures = normalizedFavorites;
     }
 
-    const normalizedBadges = this.normalizeBadgesArray((data as any).badges);
+    const normalizedBadges = this.normalizeBadgesMatrix((data as any).badges);
     if (!this.arraysEqual((data as any).badges, normalizedBadges)) {
       updates.badges = normalizedBadges;
     }
@@ -767,17 +880,14 @@ export class AuthService {
     const { userDoc } = await this.getUserDocument(userId);
     const data = userDoc.data() as any;
     return {
-      badges: this.normalizeBadgesArray(data?.badges),
+      badges: this.normalizeBadgesMatrix(data?.badges),
     };
   }
 
-  async updateBadges(userId: string, badges: number[]) {
-    const sanitized = this.sanitizeBadgesArrayInput(badges, 'badges');
+  async updateBadges(userId: string, badges: number[][]) {
+    const sanitized = this.normalizeBadgesMatrix(badges, true);
     const { userRef } = await this.getUserDocument(userId);
     await userRef.update({ badges: sanitized });
-    this.logger.log(
-      `updateBadges: stored ${sanitized.length} badge entries for ${userId}`,
-    );
     return { badges: sanitized };
   }
 

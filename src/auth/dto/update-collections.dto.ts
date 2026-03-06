@@ -22,10 +22,8 @@ export class UpdateFavoriteGesturesDto {
 
 export class UpdateBadgesDto {
   @IsArray()
-  @IsNumber({}, { each: true })
-  @Min(0, { each: true })
-  @Max(1, { each: true })
-  badges: number[];
+  @IsArray({ each: true })
+  badges: number[][];
 
   @IsOptional()
   @IsString()
