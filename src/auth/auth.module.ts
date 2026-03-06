@@ -12,6 +12,16 @@ import { GoogleStrategy } from './strategies/google.strategy';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { MailerService } from './mailer.service';
 import { AppleSignInService } from './apple/apple-signin.service';
+import {
+  ImageModerationService,
+  IMAGE_MODERATION_OPTIONS,
+  ImageModerationOptions,
+} from './image-moderation.service';
+
+const imageModerationDefaults: ImageModerationOptions = {
+  enabled: true,
+  defaultThreshold: 'LIKELY',
+};
 
 @Module({
   imports: [
@@ -29,6 +39,11 @@ import { AppleSignInService } from './apple/apple-signin.service';
     GoogleAuthGuard,
     AppleSignInService,
     MailerService,
+    ImageModerationService,
+    {
+      provide: IMAGE_MODERATION_OPTIONS,
+      useValue: imageModerationDefaults,
+    },
   ],
 })
 export class AuthModule {}

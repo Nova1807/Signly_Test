@@ -16,6 +16,15 @@ import { MailerService } from './mailer.service';
 import words from './words.json';
 import { UpdateProfileDto } from './update-profile.dto';
 import sharp from 'sharp';
+import { ImageModerationService } from './image-moderation.service';
+import {
+  formatLogContext,
+  hasValue,
+  maskEmail,
+  maskId,
+  maskIdentifier,
+  maskToken,
+} from '../common/logging/redaction';
 export type AvatarUploadFile = {
   buffer: Buffer;
   mimetype: string;
@@ -66,6 +75,7 @@ export class AuthService {
     @Inject('FIREBASE_APP') private firebaseApp: admin.app.App,
     private jwtService: JwtService,
     private mailerService: MailerService,
+    private readonly imageModerationService: ImageModerationService,
   ) {}
 
   private validateNameAgainstForbiddenWords(name: string): void {
@@ -433,7 +443,11 @@ export class AuthService {
     if (Object.keys(updates).length > 0) {
       await userDoc.ref.update(updates);
       this.logger.log(
-        `ensureUserCollections: normalized arrays for user=${userDoc.id}`,
+        'ensureUserCollections: normalized arrays' +
+          formatLogContext({
+            userId: maskId(userDoc.id),
+            updatedFields: Object.keys(updates),
+          }),
       );
     }
   }
@@ -443,7 +457,12 @@ export class AuthService {
     const userRef = firestore.collection('users').doc(userId);
     const userDoc = await userRef.get();
     if (!userDoc.exists) {
-      this.logger.warn(`getUserDocument: user not found userId=${userId}`);
+      this.logger.warn(
+        'getUserDocument: user not found' +
+          formatLogContext({
+            userId: maskId(userId),
+          }),
+      );
       throw new BadRequestException('User not found');
     }
     await this.ensureUserCollections(userDoc);
@@ -494,7 +513,12 @@ export class AuthService {
 
     if (!Number.isFinite(normalizedEntryId)) {
       this.logger.warn(
-        `updatePerformanceMatrix: invalid ${kind} id: ${entryId} for userId=${userId}`,
+        'updatePerformanceMatrix: invalid entry id' +
+          formatLogContext({
+            kind,
+            entryId,
+            userId: maskId(userId),
+          }),
       );
       throw new BadRequestException(
         kind === 'lesson' ? 'lessonId ist ungültig' : 'testId ist ungültig',
@@ -519,7 +543,12 @@ export class AuthService {
     const updatedMatrix = await firestore.runTransaction(async (tx) => {
       const userSnap = await tx.get(userRef);
       if (!userSnap.exists) {
-        this.logger.warn(`updatePerformanceMatrix: user not found userId=${userId}`);
+        this.logger.warn(
+          'updatePerformanceMatrix: user not found' +
+            formatLogContext({
+              userId: maskId(userId),
+            }),
+        );
         throw new BadRequestException('User not found');
       }
 
@@ -535,7 +564,13 @@ export class AuthService {
     });
 
     this.logger.log(
-      `updatePerformanceMatrix: updated ${matrixKey} for userId=${userId}, entryId=${normalizedEntryId}, percentage=${clampedPercentage}`,
+      'updatePerformanceMatrix: updated entry' +
+        formatLogContext({
+          matrixKey,
+          userId: maskId(userId),
+          entryId: normalizedEntryId,
+          percentage: clampedPercentage,
+        }),
     );
 
     return updatedMatrix;
@@ -570,7 +605,12 @@ export class AuthService {
     });
 
     this.logger.log(
-      `replacePerformanceMatrix: replaced ${matrixKey} for userId=${userId} with ${normalized.length} entries`,
+      'replacePerformanceMatrix: replaced matrix' +
+        formatLogContext({
+          matrixKey,
+          userId: maskId(userId),
+          entries: normalized.length,
+        }),
     );
 
     return normalized;
@@ -710,7 +750,11 @@ export class AuthService {
       };
     } catch (err: any) {
       this.logger.warn(
-        `getAvatar: failed to sign URL for ${avatarPath} (${userId}): ${err?.message}`,
+        `getAvatar: failed to sign URL (${err?.message})` +
+          formatLogContext({
+            path: avatarPath,
+            userId: maskId(userId),
+          }),
       );
       return {
         avatarUrl: null,
@@ -744,6 +788,7 @@ export class AuthService {
 
   async uploadAvatar(userId: string, file?: AvatarUploadFile) {
     const { buffer, mimeType } = await this.prepareAvatarFile(file);
+    await this.imageModerationService.assertImageIsSafe(buffer);
     const { userDoc, userRef } = await this.getUserDocument(userId);
     const previousPath = (userDoc.data() as any)?.avatarPath;
     const extension = this.detectAvatarExtension(mimeType);
@@ -762,7 +807,11 @@ export class AuthService {
         await bucket.file(previousPath).delete({ ignoreNotFound: true });
       } catch (err: any) {
         this.logger.warn(
-          `uploadAvatar: failed to delete old avatar ${previousPath} for userId=${userId}: ${err?.message}`,
+          `uploadAvatar: failed to delete old avatar (${err?.message})` +
+            formatLogContext({
+              previousPath,
+              userId: maskId(userId),
+            }),
         );
       }
     }
@@ -774,7 +823,12 @@ export class AuthService {
     });
 
     this.logger.log(
-      `uploadAvatar: stored avatar ${newPath} (${buffer.length} bytes) for userId=${userId}`,
+      'uploadAvatar: stored avatar' +
+        formatLogContext({
+          userId: maskId(userId),
+          path: newPath,
+          bytes: buffer.length,
+        }),
     );
 
     return {
@@ -794,7 +848,11 @@ export class AuthService {
         await bucket.file(avatarPath).delete({ ignoreNotFound: true });
       } catch (err: any) {
         this.logger.warn(
-          `deleteAvatar: failed to delete ${avatarPath} for userId=${userId}: ${err?.message}`,
+          `deleteAvatar: failed to delete avatar (${err?.message})` +
+            formatLogContext({
+              path: avatarPath,
+              userId: maskId(userId),
+            }),
         );
       }
     }
@@ -805,7 +863,12 @@ export class AuthService {
       avatarUpdatedAt: admin.firestore.FieldValue.delete(),
     });
 
-    this.logger.log(`deleteAvatar: removed avatar metadata for userId=${userId}`);
+    this.logger.log(
+      'deleteAvatar: removed avatar metadata' +
+        formatLogContext({
+          userId: maskId(userId),
+        }),
+    );
     return { success: true };
   }
 
@@ -819,7 +882,6 @@ export class AuthService {
   }
 
   async signup(signupData: SignupDto) {
-    this.logger.log(`signup start: ${JSON.stringify(signupData)}`);
     await this.cleanupExpiredEmailVerificationTokens();
 
     const rawNameFromDto =
@@ -831,6 +893,15 @@ export class AuthService {
 
     const { email, password } = signupData as any;
 
+    this.logger.log(
+      'signup start' +
+        formatLogContext({
+          email: maskEmail(email),
+          hasPassword: hasValue(password),
+          nameLength: name.length,
+        }),
+    );
+
     if (!email || typeof email !== 'string' || !email.trim()) {
       this.logger.warn('signup: missing email');
       throw new BadRequestException('Email ist erforderlich');
@@ -840,7 +911,7 @@ export class AuthService {
       throw new BadRequestException('Passwort ist erforderlich');
     }
     if (!name) {
-      this.logger.warn(`signup: missing name (raw: ${JSON.stringify(rawNameFromDto)})`);
+      this.logger.warn('signup: missing name');
       throw new BadRequestException('Name ist erforderlich');
     }
 
@@ -853,19 +924,38 @@ export class AuthService {
 
       const emailRef = firestore.collection('users').where('email', '==', email);
       const emailSnapshot = await emailRef.get();
-      this.logger.log(`signup: existing users with email=${email}: ${emailSnapshot.size}`);
+      this.logger.log(
+        'signup: checked email availability' +
+          formatLogContext({
+            email: maskEmail(email),
+            matches: emailSnapshot.size,
+          }),
+      );
 
       if (!emailSnapshot.empty) {
-        this.logger.warn(`signup: email already in use: ${email}`);
+        this.logger.warn(
+          'signup: email already in use' + formatLogContext({ email: maskEmail(email) }),
+        );
         throw new BadRequestException('Diese Email hat bereits einen Account');
       }
 
       const nameRef = firestore.collection('users').where('name', '==', name);
       const nameSnapshot = await nameRef.get();
-      this.logger.log(`signup: existing users with name=${name}: ${nameSnapshot.size}`);
+      this.logger.log(
+        'signup: checked name availability' +
+          formatLogContext({
+            nameLength: name.length,
+            matches: nameSnapshot.size,
+          }),
+      );
 
       if (!nameSnapshot.empty) {
-        this.logger.warn(`signup: name already in use: ${name}`);
+        this.logger.warn(
+          'signup: name already in use' +
+            formatLogContext({
+              nameLength: name.length,
+            }),
+        );
         throw new BadRequestException('Dieser Benutzername ist bereits vergeben');
       }
 
@@ -878,7 +968,13 @@ export class AuthService {
         .get();
 
       if (!oldTokensQuery.empty) {
-        this.logger.log(`signup: deleting ${oldTokensQuery.size} old tokens for ${email}`);
+        this.logger.log(
+          'signup: deleting old verification tokens' +
+            formatLogContext({
+              email: maskEmail(email),
+              tokens: oldTokensQuery.size,
+            }),
+        );
         const deletePromises = oldTokensQuery.docs.map((doc) => doc.ref.delete());
         await Promise.all(deletePromises);
       }
@@ -887,7 +983,10 @@ export class AuthService {
       const createdAt = new Date();
       const expiresAt = new Date(createdAt.getTime() + 15 * 60 * 1000);
 
-      this.logger.log(`signup: creating token ${token}`);
+      this.logger.log(
+        'signup: creating verification token' +
+          formatLogContext({ token: maskToken(token, 'emailVerificationToken') }),
+      );
       this.logger.log(`signup: token expires at ${expiresAt.toISOString()}`);
       this.logger.log(`signup: server time: ${createdAt.toISOString()}`);
 
@@ -916,9 +1015,16 @@ export class AuthService {
   }
 
   async login(credentials: LoginDto) {
-    this.logger.log(`login start: ${JSON.stringify(credentials)}`);
 
     const { identifier, password } = credentials as any;
+
+    this.logger.log(
+      'login start' +
+        formatLogContext({
+          identifier: maskIdentifier(identifier),
+          hasPassword: hasValue(password),
+        }),
+    );
 
     try {
       const firestore = this.firebaseApp.firestore();
@@ -932,24 +1038,46 @@ export class AuthService {
 
       const snapshot = await userQuery.get();
       this.logger.log(
-        `login: users found with ${isEmail ? 'email' : 'name'}=${identifier}: ${snapshot.size}`,
+        'login: query result' +
+          formatLogContext({
+            lookup: isEmail ? 'email' : 'name',
+            identifier: maskIdentifier(identifier),
+            matches: snapshot.size,
+          }),
       );
 
       if (snapshot.empty) {
-        this.logger.warn(`login: no user found for ${isEmail ? 'email' : 'name'}=${identifier}`);
+        this.logger.warn(
+          'login: no user found' +
+            formatLogContext({
+              lookup: isEmail ? 'email' : 'name',
+              identifier: maskIdentifier(identifier),
+            }),
+        );
         throw new UnauthorizedException('Wrong credentials');
       }
 
       const userDoc = snapshot.docs[0];
       await this.ensureUserCollections(userDoc);
       const user = userDoc.data() as any;
-      this.logger.log(`login: userDoc id=${userDoc.id}, user=${JSON.stringify(user)}`);
+      this.logger.log(
+        'login: user document hydrated' +
+          formatLogContext({
+            userId: maskId(userDoc.id),
+          }),
+      );
 
       const passwordMatch = await bcrypt.compare(password, user.password);
       this.logger.log(`login: passwordMatch=${passwordMatch}`);
 
       if (!passwordMatch) {
-        this.logger.warn(`login: wrong password for ${isEmail ? 'email' : 'name'}=${identifier}`);
+        this.logger.warn(
+          'login: wrong password' +
+            formatLogContext({
+              lookup: isEmail ? 'email' : 'name',
+              identifier: maskIdentifier(identifier),
+            }),
+        );
         throw new UnauthorizedException('Wrong credentials');
       }
 
@@ -976,7 +1104,12 @@ export class AuthService {
   }
 
   async refreshTokens(refreshToken: string) {
-    this.logger.log(`refreshTokens start: token=${refreshToken}`);
+    this.logger.log(
+      'refreshTokens start' +
+        formatLogContext({
+          token: maskToken(refreshToken, 'refreshToken'),
+        }),
+    );
 
     try {
       const firestore = this.firebaseApp.firestore();
@@ -988,7 +1121,12 @@ export class AuthService {
         .where('expiryDate', '>=', new Date());
 
       const snapshot = await tokenRef.get();
-      this.logger.log(`refreshTokens: tokens found=${snapshot.size}`);
+      this.logger.log(
+        'refreshTokens: lookup result' +
+          formatLogContext({
+            tokens: snapshot.size,
+          }),
+      );
 
       if (snapshot.empty) {
         this.logger.warn('refreshTokens: token not found or expired');
@@ -997,7 +1135,13 @@ export class AuthService {
 
       const tokenDoc = snapshot.docs[0];
       const token = tokenDoc.data() as any;
-      this.logger.log(`refreshTokens: tokenDoc id=${tokenDoc.id}, userId=${token.userId}`);
+      this.logger.log(
+        'refreshTokens: token resolved' +
+          formatLogContext({
+            tokenId: maskId(tokenDoc.id),
+            userId: maskId(token.userId),
+          }),
+      );
 
       const tokens = await this.generateUserToken(token.userId);
       this.logger.log('refreshTokens: new tokens generated');
@@ -1009,7 +1153,12 @@ export class AuthService {
   }
 
   async generateUserToken(userId: string) {
-    this.logger.log(`generateUserToken start: userId=${userId}`);
+    this.logger.log(
+      'generateUserToken start' +
+        formatLogContext({
+          userId: maskId(userId),
+        }),
+    );
 
     const accessToken = this.jwtService.sign({ userId }, { expiresIn: '1h' });
     const refreshToken = uuidv4();
@@ -1025,7 +1174,12 @@ export class AuthService {
   }
 
   async storeRefreshToken(token: string, userId: string) {
-    this.logger.log(`storeRefreshToken start: userId=${userId}`);
+    this.logger.log(
+      'storeRefreshToken start' +
+        formatLogContext({
+          userId: maskId(userId),
+        }),
+    );
 
     const expiryDate = new Date();
     expiryDate.setDate(expiryDate.getDate() + 3);
@@ -1049,7 +1203,12 @@ export class AuthService {
     email?: string;
     name?: string;
   }> {
-    this.logger.log(`verifyEmailToken START: token='${token}'`);
+    this.logger.log(
+      'verifyEmailToken start' +
+        formatLogContext({
+          token: maskToken(token, 'emailVerificationToken'),
+        }),
+    );
 
     const firestore = this.firebaseApp.firestore();
     await this.cleanupExpiredEmailVerificationTokens();
@@ -1083,7 +1242,14 @@ export class AuthService {
       const password = tokenData.password;
       const name: string = (tokenData.name && String(tokenData.name)) || '';
 
-      this.logger.log(`verifyEmailToken: tokenData.email='${email}', name='${name}'`);
+      this.logger.log(
+        'verifyEmailToken: payload extracted' +
+          formatLogContext({
+            email: maskEmail(email),
+            hasPassword: hasValue(password),
+            nameLength: name.length,
+          }),
+      );
 
       if (!email || !password) {
         this.logger.warn(`verifyEmailToken: missing required fields`);
@@ -1098,12 +1264,18 @@ export class AuthService {
       const userQuery = await firestore.collection('users').where('email', '==', email).get();
 
       if (!userQuery.empty) {
-        this.logger.log(`verifyEmailToken: user already exists for email: ${email}`);
+        this.logger.log(
+          'verifyEmailToken: user already exists' + formatLogContext({ email: maskEmail(email) }),
+        );
         const existingUser = userQuery.docs[0];
         try {
           await docRef.delete();
           this.logger.log(
-            `verifyEmailToken: deleted emailVerification token after existing user for email=${email}`,
+            'verifyEmailToken: deleted stale verification token' +
+              formatLogContext({
+                token: maskToken(token, 'emailVerificationToken'),
+                email: maskEmail(email),
+              }),
           );
         } catch (delErr) {
           this.logger.warn(`verifyEmailToken: failed to delete token doc: ${delErr?.message}`);
@@ -1118,7 +1290,9 @@ export class AuthService {
         };
       }
 
-      this.logger.log(`verifyEmailToken: creating user for email: ${email}`);
+      this.logger.log(
+        'verifyEmailToken: creating user' + formatLogContext({ email: maskEmail(email) }),
+      );
       const userRef = await firestore.collection('users').add({
         email,
         password,
@@ -1138,12 +1312,21 @@ export class AuthService {
         avatarUpdatedAt: null,
       });
 
-      this.logger.log(`verifyEmailToken: user created with ID: ${userRef.id}`);
+      this.logger.log(
+        'verifyEmailToken: user created' +
+          formatLogContext({
+            userId: maskId(userRef.id),
+          }),
+      );
 
       try {
         await docRef.delete();
         this.logger.log(
-          `verifyEmailToken: deleted emailVerification token after creating user id=${userRef.id}`,
+          'verifyEmailToken: deleted verification token after user creation' +
+            formatLogContext({
+              token: maskToken(token, 'emailVerificationToken'),
+              userId: maskId(userRef.id),
+            }),
         );
       } catch (delErr) {
         this.logger.warn(
@@ -1172,7 +1355,11 @@ export class AuthService {
   // Google-Login mit Login-Streak
   async loginWithGoogle(googleUser: { email: string; name: string; googleId: string }) {
     this.logger.log(
-      `loginWithGoogle start: email=${googleUser.email}, googleId=${googleUser.googleId}`,
+      'loginWithGoogle start' +
+        formatLogContext({
+          email: maskEmail(googleUser.email),
+          googleId: maskId(googleUser.googleId),
+        }),
     );
 
     if (!googleUser.email) {
@@ -1210,7 +1397,11 @@ export class AuthService {
       longestLoginStreak = streakData.longestLoginStreak;
 
       this.logger.log(
-        `loginWithGoogle: found user by googleId=${googleUser.googleId}, userId=${userId}`,
+        'loginWithGoogle: matched by googleId' +
+          formatLogContext({
+            googleId: maskId(googleUser.googleId),
+            userId: maskId(userId),
+          }),
       );
     } else {
       // nach email
@@ -1236,7 +1427,11 @@ export class AuthService {
         longestLoginStreak = streakData.longestLoginStreak;
 
         this.logger.log(
-          `loginWithGoogle: found existing user by email=${googleUser.email}, userId=${userId}`,
+          'loginWithGoogle: matched by email' +
+            formatLogContext({
+              email: maskEmail(googleUser.email),
+              userId: maskId(userId),
+            }),
         );
       } else {
         // neuer User
@@ -1245,7 +1440,12 @@ export class AuthService {
           now,
         );
 
-        this.logger.log(`loginWithGoogle: creating new user for email=${googleUser.email}`);
+        this.logger.log(
+          'loginWithGoogle: creating new user' +
+            formatLogContext({
+              email: maskEmail(googleUser.email),
+            }),
+        );
 
         const newUserRef = await firestore.collection('users').add({
           email: googleUser.email,
@@ -1269,7 +1469,12 @@ export class AuthService {
         loginStreak = streakData.loginStreak;
         longestLoginStreak = streakData.longestLoginStreak;
 
-        this.logger.log(`loginWithGoogle: new user created with ID=${userId}`);
+        this.logger.log(
+          'loginWithGoogle: new user created' +
+            formatLogContext({
+              userId: maskId(userId),
+            }),
+        );
       }
     }
 
@@ -1290,7 +1495,11 @@ export class AuthService {
   // Apple-Login mit Login-Streak
   async loginWithApple(appleUser: { email: string; name: string; appleId: string }) {
     this.logger.log(
-      `loginWithApple start: email=${appleUser.email}, appleId=${appleUser.appleId}`,
+      'loginWithApple start' +
+        formatLogContext({
+          email: maskEmail(appleUser.email),
+          appleId: maskId(appleUser.appleId),
+        }),
     );
 
     /**
@@ -1332,7 +1541,11 @@ export class AuthService {
       longestLoginStreak = streakData.longestLoginStreak;
 
       this.logger.log(
-        `loginWithApple: found user by appleId=${appleUser.appleId}, userId=${userId}`,
+        'loginWithApple: matched by appleId' +
+          formatLogContext({
+            appleId: maskId(appleUser.appleId),
+            userId: maskId(userId),
+          }),
       );
     } else {
       // 2) Kein user via appleId → dann brauchen wir email für Merge/Create
@@ -1367,7 +1580,11 @@ export class AuthService {
         longestLoginStreak = streakData.longestLoginStreak;
 
         this.logger.log(
-          `loginWithApple: found existing user by email=${appleUser.email}, userId=${userId}`,
+          'loginWithApple: matched by email' +
+            formatLogContext({
+              email: maskEmail(appleUser.email),
+              userId: maskId(userId),
+            }),
         );
       } else {
         const streakData = this.updateLoginStreak(
@@ -1376,7 +1593,10 @@ export class AuthService {
         );
 
         this.logger.log(
-          `loginWithApple: creating new user for email=${appleUser.email}`,
+          'loginWithApple: creating new user' +
+            formatLogContext({
+              email: maskEmail(appleUser.email),
+            }),
         );
 
         const newUserRef = await firestore.collection('users').add({
@@ -1401,7 +1621,12 @@ export class AuthService {
         loginStreak = streakData.loginStreak;
         longestLoginStreak = streakData.longestLoginStreak;
 
-        this.logger.log(`loginWithApple: new user created with ID=${userId}`);
+        this.logger.log(
+          'loginWithApple: new user created' +
+            formatLogContext({
+              userId: maskId(userId),
+            }),
+        );
       }
     }
 
@@ -1421,14 +1646,27 @@ export class AuthService {
 
   // Profil aktualisieren (Name + AboutMe)
   async updateProfile(userId: string, dto: UpdateProfileDto) {
-    this.logger.log(`updateProfile start: userId=${userId}, dto=${JSON.stringify(dto)}`);
+    this.logger.log(
+      'updateProfile start' +
+        formatLogContext({
+          userId: maskId(userId),
+          nameProvided: hasValue(dto?.name),
+          aboutMeLength:
+            typeof dto?.aboutMe === 'string' ? dto.aboutMe.trim().length : undefined,
+        }),
+    );
 
     const firestore = this.firebaseApp.firestore();
     const userRef = firestore.collection('users').doc(userId);
     const userDoc = await userRef.get();
 
     if (!userDoc.exists) {
-      this.logger.warn(`updateProfile: user not found: ${userId}`);
+      this.logger.warn(
+        'updateProfile: user not found' +
+          formatLogContext({
+            userId: maskId(userId),
+          }),
+      );
       throw new BadRequestException('User not found');
     }
 
@@ -1442,7 +1680,12 @@ export class AuthService {
 
       const conflict = nameSnapshot.docs.find((d) => d.id !== userId);
       if (conflict) {
-        this.logger.warn(`updateProfile: name already in use by other user: ${newName}`);
+        this.logger.warn(
+          'updateProfile: name already in use by other user' +
+            formatLogContext({
+              nameLength: newName.length,
+            }),
+        );
         throw new BadRequestException('Dieser Benutzername ist bereits vergeben');
       }
 
@@ -1462,7 +1705,13 @@ export class AuthService {
 
     await userRef.update(updates);
 
-    this.logger.log(`updateProfile: updated user ${userId}`);
+    this.logger.log(
+      'updateProfile: updated user' +
+        formatLogContext({
+          userId: maskId(userId),
+          updatedFields: Object.keys(updates),
+        }),
+    );
     return {
       success: true,
       message: 'Profil aktualisiert',
@@ -1476,13 +1725,23 @@ export class AuthService {
    * modifying it.
    */
   async getStreak(userId: string) {
-    this.logger.log(`getStreak start: userId=${userId}`);
+    this.logger.log(
+      'getStreak start' +
+        formatLogContext({
+          userId: maskId(userId),
+        }),
+    );
     const firestore = this.firebaseApp.firestore();
     const userRef = firestore.collection('users').doc(userId);
     const userDoc = await userRef.get();
 
     if (!userDoc.exists) {
-      this.logger.warn(`getStreak: user not found: ${userId}`);
+      this.logger.warn(
+        'getStreak: user not found' +
+          formatLogContext({
+            userId: maskId(userId),
+          }),
+      );
       throw new BadRequestException('User not found');
     }
 

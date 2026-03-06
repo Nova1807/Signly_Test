@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
+import { formatLogContext, maskEmail, maskToken } from '../common/logging/redaction';
 
 @Injectable()
 export class MailerService {
@@ -7,12 +8,14 @@ export class MailerService {
 
   async sendVerificationEmail(email: string, token: string, name?: string) {
     this.logger.log(
-      `sendVerificationEmail start: email=${email}, name='${name || ''}'`,
+      'sendVerificationEmail start' +
+        formatLogContext({
+          email: maskEmail(email),
+          nameLength: name?.length ?? 0,
+        }),
     );
 
     const encodedToken = encodeURIComponent(token);
-    this.logger.log(`sendVerificationEmail: raw token=${token}`);
-    this.logger.log(`sendVerificationEmail: encoded token=${encodedToken}`);
 
     const user = process.env.BREVO_SMTP_USER;
     const pass = process.env.BREVO_SMTP_KEY;
@@ -39,7 +42,12 @@ export class MailerService {
 
     const baseVerifyUrl = 'https://backend.signly.at/auth/verify';
     const verifyUrl = `${baseVerifyUrl}?token=${encodedToken}`;
-    this.logger.log(`sendVerificationEmail: verify URL: ${verifyUrl}`);
+    this.logger.log(
+      'sendVerificationEmail: verify URL generated' +
+        formatLogContext({
+          token: maskToken(token, 'verifyToken'),
+        }),
+    );
 
     // Use image links 1:1 as requested
     const logoUrl =
@@ -208,7 +216,11 @@ export class MailerService {
     try {
       const info = await transporter.sendMail(mailOptions);
       this.logger.log(
-        `sendVerificationEmail: mail sent to ${email}, messageId: ${info.messageId}`,
+        'sendVerificationEmail: mail sent' +
+          formatLogContext({
+            email: maskEmail(email),
+            messageId: info.messageId,
+          }),
       );
       return info;
     } catch (error) {
@@ -221,7 +233,12 @@ export class MailerService {
   }
 
   async sendPasswordResetEmail(email: string, token: string) {
-    this.logger.log(`sendPasswordResetEmail start: email=${email}`);
+    this.logger.log(
+      'sendPasswordResetEmail start' +
+        formatLogContext({
+          email: maskEmail(email),
+        }),
+    );
 
     const encodedToken = encodeURIComponent(token);
 
@@ -250,7 +267,12 @@ export class MailerService {
 
     const baseResetUrl = 'https://backend.signly.at/password-reset/form';
     const resetUrl = `${baseResetUrl}?token=${encodedToken}`;
-    this.logger.log(`sendPasswordResetEmail: reset URL: ${resetUrl}`);
+    this.logger.log(
+      'sendPasswordResetEmail: reset URL generated' +
+        formatLogContext({
+          token: maskToken(token, 'passwordResetToken'),
+        }),
+    );
 
     // Gleiche Bild-Assets wie in der Verifizierungs-Mail
     const logoUrl =
@@ -401,7 +423,11 @@ export class MailerService {
     try {
       const info = await transporter.sendMail(mailOptions);
       this.logger.log(
-        `sendPasswordResetEmail: mail sent to ${email}, messageId: ${info.messageId}`,
+        'sendPasswordResetEmail: mail sent' +
+          formatLogContext({
+            email: maskEmail(email),
+            messageId: info.messageId,
+          }),
       );
       return info;
     } catch (error) {

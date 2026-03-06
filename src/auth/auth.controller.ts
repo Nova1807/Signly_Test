@@ -40,6 +40,14 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import type { AvatarUploadFile } from './auth.service';
+import {
+  formatLogContext,
+  hasValue,
+  maskEmail,
+  maskIdentifier,
+  maskId,
+  maskToken,
+} from '../common/logging/redaction';
 
 const AVATAR_UPLOAD_MAX_BYTES = Number(process.env.AVATAR_MAX_BYTES ?? 5 * 1024 * 1024);
 
@@ -56,7 +64,17 @@ export class AuthController {
 
   @Post('signup')
   async signUp(@Body() signupData: SignupDto) {
-    this.logger.log(`signup called with body: ${JSON.stringify(signupData)}`);
+    this.logger.log(
+      'signup called' +
+        formatLogContext({
+          email: maskEmail((signupData as any)?.email),
+          hasPassword: hasValue((signupData as any)?.password),
+          nameLength:
+            typeof (signupData as any)?.name === 'string'
+              ? ((signupData as any).name as string).trim().length
+              : undefined,
+        }),
+    );
     try {
       const result = await this.authService.signup(signupData);
       this.logger.log('signup finished successfully');
@@ -69,7 +87,13 @@ export class AuthController {
 
   @Post('login')
   async login(@Body() credentials: LoginDto) {
-    this.logger.log(`login called with body: ${JSON.stringify(credentials)}`);
+    this.logger.log(
+      'login called' +
+        formatLogContext({
+          identifier: maskIdentifier((credentials as any)?.identifier),
+          hasPassword: hasValue((credentials as any)?.password),
+        }),
+    );
     try {
       const result = await this.authService.login(credentials);
       this.logger.log(
@@ -84,7 +108,12 @@ export class AuthController {
 
   @Post('refresh')
   async refreshtoken(@Body() refreshtokenDto: RefreshTokenDto) {
-    this.logger.log(`refresh called with body: ${JSON.stringify(refreshtokenDto)}`);
+    this.logger.log(
+      'refresh called' +
+        formatLogContext({
+          tokenPresent: hasValue(refreshtokenDto?.refreshToken),
+        }),
+    );
     try {
       const result = await this.authService.refreshTokens(refreshtokenDto.refreshToken);
       this.logger.log('refresh finished successfully');
@@ -101,7 +130,13 @@ export class AuthController {
     @Query('name') nameQuery: string | undefined,
     @Res() res: Response,
   ) {
-    this.logger.log(`VERIFY ENDPOINT CALLED with token: ${token}, nameQuery: ${nameQuery}`);
+    this.logger.log(
+      'VERIFY ENDPOINT CALLED' +
+        formatLogContext({
+          token: maskToken(token, 'verifyToken'),
+          hasNameQuery: hasValue(nameQuery),
+        }),
+    );
 
     const fallbackName = 'Nutzer';
 
@@ -138,9 +173,19 @@ export class AuthController {
         return res.status(400).send(renderExpiredPageHtml());
       }
 
-      this.logger.log(`verify: token still valid, calling authService.verifyEmailToken('${token}')`);
+      this.logger.log(
+        'verify: token still valid, calling authService.verifyEmailToken' +
+          formatLogContext({ token: maskToken(token, 'verifyToken') }),
+      );
       const result = await this.authService.verifyEmailToken(token);
-      this.logger.log(`verify: result: ${JSON.stringify(result)}`);
+      this.logger.log(
+        'verify: result received' +
+          formatLogContext({
+            success: result?.success,
+            userIdPresent: hasValue(result?.userId),
+            email: maskEmail(result?.email),
+          }),
+      );
 
       if (!result.success) {
         this.logger.warn(
@@ -150,7 +195,12 @@ export class AuthController {
       }
 
       const userName = (result.name && result.name.trim()) || fallbackName;
-      this.logger.log(`verify: rendering success page with userName='${userName}'`);
+      this.logger.log(
+        'verify: rendering success page' +
+          formatLogContext({
+            userNameLength: userName.length,
+          }),
+      );
       return res.send(renderSuccessPageHtml(userName));
     } catch (err) {
       this.logger.error(`verify ERROR: ${err?.message}`, err?.stack);
@@ -170,9 +220,15 @@ export class AuthController {
   @Get('google/redirect')
   @UseGuards(GoogleAuthGuard)
   async googleAuthRedirect(@Req() req: Request, @Res() res: Response) {
-    this.logger.log(`googleAuthRedirect called, user=${JSON.stringify(req.user)}`);
-
     const googleUser = req.user as { email: string; name: string; googleId: string };
+    this.logger.log(
+      'googleAuthRedirect called' +
+        formatLogContext({
+          hasUser: !!googleUser,
+          email: maskEmail(googleUser?.email),
+          googleId: maskId(googleUser?.googleId),
+        }),
+    );
 
     const { accessToken, refreshToken, loginStreak, longestLoginStreak } =
       await this.authService.loginWithGoogle(googleUser);
@@ -184,7 +240,13 @@ export class AuthController {
       `&loginStreak=${encodeURIComponent(String(loginStreak ?? 0))}` +
       `&longestLoginStreak=${encodeURIComponent(String(longestLoginStreak ?? 0))}`;
 
-    this.logger.log(`googleAuthRedirect redirecting to ${appRedirectUrl}`);
+    this.logger.log(
+      'googleAuthRedirect redirecting to mobile deep link' +
+        formatLogContext({
+          hasAccessToken: hasValue(accessToken),
+          hasRefreshToken: hasValue(refreshToken),
+        }),
+    );
     return res.redirect(appRedirectUrl);
   }
 
@@ -247,7 +309,13 @@ export class AuthController {
         `&loginStreak=${encodeURIComponent(String(loginStreak ?? 0))}` +
         `&longestLoginStreak=${encodeURIComponent(String(longestLoginStreak ?? 0))}`;
 
-      this.logger.log(`appleAuthRedirect redirecting to ${appRedirectUrl}`);
+      this.logger.log(
+        'appleAuthRedirect redirecting to mobile deep link' +
+          formatLogContext({
+            hasAccessToken: hasValue(accessToken),
+            hasRefreshToken: hasValue(refreshToken),
+          }),
+      );
       return res.redirect(appRedirectUrl);
     } catch (err: any) {
       // Damit du endlich siehst was es ist (und nicht nur "Internal server error")
@@ -288,7 +356,13 @@ export class AuthController {
         `&loginStreak=${encodeURIComponent(String(loginStreak ?? 0))}` +
         `&longestLoginStreak=${encodeURIComponent(String(longestLoginStreak ?? 0))}`;
 
-      this.logger.log(`appleAuthRedirectGet redirecting to ${appRedirectUrl}`);
+      this.logger.log(
+        'appleAuthRedirectGet redirecting to mobile deep link' +
+          formatLogContext({
+            hasAccessToken: hasValue(accessToken),
+            hasRefreshToken: hasValue(refreshToken),
+          }),
+      );
       return res.redirect(appRedirectUrl);
     } catch (err: any) {
       this.logger.error(`appleAuthRedirectGet ERROR: ${err?.message}`, err?.stack);
@@ -324,7 +398,15 @@ export class AuthController {
     const { accessToken: _ignored, ...profileDto } = dto;
 
     this.logger.log(
-      `updateProfile endpoint called by userId=${userId} with body=${JSON.stringify(profileDto)}`,
+      'updateProfile endpoint called' +
+        formatLogContext({
+          userId: maskId(userId),
+          hasName: hasValue((profileDto as any)?.name),
+          aboutMeLength:
+            typeof (profileDto as any)?.aboutMe === 'string'
+              ? ((profileDto as any).aboutMe as string).trim().length
+              : undefined,
+        }),
     );
 
     return this.authService.updateProfile(userId, profileDto);

@@ -31,6 +31,15 @@
 $ npm install
 ```
 
+## Avatar moderation
+
+User-Avatare werden jetzt vor dem Speichern mit der Google Cloud Vision SafeSearch API geprüft. Stelle sicher, dass:
+
+- Die Vision API im Google Cloud Projekt aktiviert ist.
+- Der Server-Dienstaccount die Berechtigung `Cloud Vision API User` besitzt bzw. über die Application Default Credentials zugreifen kann.
+
+Die Moderationslogik wird zentral über den Provider `imageModerationDefaults` in `src/auth/auth.module.ts` konfiguriert. Passe dort `enabled`, `defaultThreshold` oder die einzelnen Thresholds an, wenn du andere Richtlinien möchtest (z. B. `defaultThreshold: 'VERY_LIKELY'` oder `thresholds: { violence: 'VERY_LIKELY' }`). Ein Wert von `'OFF'` bzw. `Number.POSITIVE_INFINITY` deaktiviert eine Kategorie komplett.
+
 ## Compile and run the project
 
 ```bash

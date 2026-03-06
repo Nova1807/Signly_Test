@@ -8,6 +8,7 @@ import { Request } from 'express';
 import * as https from 'node:https';
 import { createPublicKey, randomBytes } from 'node:crypto';
 import jwt, { JwtPayload } from 'jsonwebtoken';
+import { formatLogContext, maskEmail, maskId } from '../../common/logging/redaction';
 
 type ApplePublicKey = {
   kty: string;
@@ -250,7 +251,12 @@ export class AppleSignInService {
 
     const logSuffix = options.logSuffix ? `, ${options.logSuffix}` : '';
     this.logger.log(
-      `Verified Apple id_token for appleId=${appleId}, email=${email || 'n/a'}${logSuffix}`,
+      'Verified Apple id_token' +
+        formatLogContext({
+          appleId: maskId(appleId),
+          email: maskEmail(email),
+          logSuffix,
+        }),
     );
 
     return {

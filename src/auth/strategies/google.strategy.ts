@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, Profile, StrategyOptions } from 'passport-google-oauth20';
+import { formatLogContext, maskEmail, maskId } from '../../common/logging/redaction';
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
@@ -38,7 +39,12 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     const googleId = profile.id;
 
     this.logger.log(
-      `validate called: email=${email}, name=${name}, googleId=${googleId}`,
+      'GoogleStrategy validate called' +
+        formatLogContext({
+          email: maskEmail(email),
+          googleId: maskId(googleId),
+          nameLength: name.length,
+        }),
     );
 
     return { email, name, googleId };

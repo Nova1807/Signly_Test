@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger, Inject } from '@nestjs/common'
 import * as admin from 'firebase-admin';
 import * as bcrypt from 'bcrypt';
 import { MailerService } from '../auth/mailer.service';
+import { formatLogContext, maskEmail } from '../common/logging/redaction';
 
 @Injectable()
 export class PasswordResetService {
@@ -69,7 +70,12 @@ export class PasswordResetService {
 
     if (userQuery.empty) {
       // Keine Info leaken: gleiche Antwort wie erfolgreicher Fall
-      this.logger.warn(`requestPasswordReset: unknown email ${email}`);
+      this.logger.warn(
+        'requestPasswordReset: unknown email' +
+          formatLogContext({
+            email: maskEmail(email),
+          }),
+      );
       return {
         success: true,
         message:
