@@ -36,6 +36,7 @@ import {
 import {
   UpdateDictionaryDto,
   UpdateFavoriteGesturesDto,
+  UpdateBadgesDto,
 } from './dto/update-collections.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -573,6 +574,30 @@ export class AuthController {
     const accessToken = this.resolveAccessToken(req, undefined, dto.accessToken);
     const userId = this.resolveUserIdFromToken(accessToken);
     return this.authService.updateFavoriteGestures(userId, dto.favoriteGestures ?? []);
+  }
+
+  @Get('badges')
+  async getBadges(
+    @Query('accessToken') accessTokenQuery: string | undefined,
+    @Req() req: Request,
+  ) {
+    this.logger.log('getBadges called');
+    const accessToken = this.resolveAccessToken(req, accessTokenQuery);
+    const userId = this.resolveUserIdFromToken(accessToken);
+    return this.authService.getBadges(userId);
+  }
+
+  @Post('badges')
+  async updateBadges(
+    @Body() dto: UpdateBadgesDto,
+    @Req() req: Request,
+  ) {
+    this.logger.log(
+      `updateBadges called with ${dto.badges?.length ?? 0} entries`,
+    );
+    const accessToken = this.resolveAccessToken(req, undefined, dto.accessToken);
+    const userId = this.resolveUserIdFromToken(accessToken);
+    return this.authService.updateBadges(userId, dto.badges ?? []);
   }
 
   @Get('profile/avatar')

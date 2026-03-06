@@ -1,4 +1,4 @@
-import { IsArray, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsOptional, IsString, IsNumber, Min, Max } from 'class-validator';
 
 export class UpdateDictionaryDto {
   @IsArray()
@@ -14,6 +14,18 @@ export class UpdateFavoriteGesturesDto {
   @IsArray()
   @IsString({ each: true })
   favoriteGestures: string[];
+
+  @IsOptional()
+  @IsString()
+  accessToken?: string;
+}
+
+export class UpdateBadgesDto {
+  @IsArray()
+  @IsNumber({}, { each: true })
+  @Min(0, { each: true })
+  @Max(1, { each: true })
+  badges: number[];
 
   @IsOptional()
   @IsString()

@@ -298,6 +298,44 @@ export class AuthService {
     return this.normalizeStringArray(value);
   }
 
+  private normalizeBadgesArray(value: any): number[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    const normalized: number[] = [];
+
+    for (const entry of value) {
+      const n = Number(entry);
+      if (!Number.isFinite(n)) {
+        continue;
+      }
+      if (n === 0 || n === 1) {
+        normalized.push(n);
+      }
+    }
+
+    return normalized;
+  }
+
+  private sanitizeBadgesArrayInput(value: any, fieldName: string): number[] {
+    if (!Array.isArray(value)) {
+      throw new BadRequestException(`${fieldName} muss ein Array aus Zahlen (0 oder 1) sein`);
+    }
+
+    const result: number[] = [];
+
+    for (const entry of value) {
+      const n = Number(entry);
+      if (!Number.isFinite(n) || (n !== 0 && n !== 1)) {
+        throw new BadRequestException(`${fieldName} darf nur 0 oder 1 enthalten`);
+      }
+      result.push(n);
+    }
+
+    return result;
+  }
+
   private getStorageBucket() {
     return this.firebaseApp.storage().bucket();
   }
@@ -438,6 +476,11 @@ export class AuthService {
     const normalizedFavorites = this.normalizeStringArray(data.favoriteGestures);
     if (!this.arraysEqual(data.favoriteGestures, normalizedFavorites)) {
       updates.favoriteGestures = normalizedFavorites;
+    }
+
+    const normalizedBadges = this.normalizeBadgesArray((data as any).badges);
+    if (!this.arraysEqual((data as any).badges, normalizedBadges)) {
+      updates.badges = normalizedBadges;
     }
 
     if (Object.keys(updates).length > 0) {
@@ -718,6 +761,24 @@ export class AuthService {
       `updateFavoriteGestures: stored ${sanitized.length} favorite gestures for ${userId}`,
     );
     return { favoriteGestures: sanitized };
+  }
+
+  async getBadges(userId: string) {
+    const { userDoc } = await this.getUserDocument(userId);
+    const data = userDoc.data() as any;
+    return {
+      badges: this.normalizeBadgesArray(data?.badges),
+    };
+  }
+
+  async updateBadges(userId: string, badges: number[]) {
+    const sanitized = this.sanitizeBadgesArrayInput(badges, 'badges');
+    const { userRef } = await this.getUserDocument(userId);
+    await userRef.update({ badges: sanitized });
+    this.logger.log(
+      `updateBadges: stored ${sanitized.length} badge entries for ${userId}`,
+    );
+    return { badges: sanitized };
   }
 
   async getAvatar(userId: string) {
