@@ -190,7 +190,12 @@ export class UserCollectionsManager {
         return Number.isFinite(numeric) && (numeric === 0 || numeric === 1);
       });
 
-    const pushEntry = (idValue: any, stateValue: any, unlockedValue: any, allowUnlockedInput: boolean) => {
+    const pushEntry = (
+      idValue: any,
+      stateValue: any,
+      unlockedValue: any,
+      allowUnlockedInput: boolean,
+    ) => {
       const numericId = Number(idValue);
       const numericState = Number(stateValue);
 
@@ -256,7 +261,7 @@ export class UserCollectionsManager {
           continue;
         }
 
-        pushEntry(idValue, stateValue, unlockedValue, !strict);
+        pushEntry(idValue, stateValue, unlockedValue, true);
       }
     }
 
@@ -552,12 +557,14 @@ export class UserCollectionsManager {
       existingMap.set(id, { state, unlockedAt: unlockedAt ?? null });
     });
 
-    const updated = incoming.map(([id, state]) => {
+    const updated = incoming.map(([id, state, providedUnlocked]) => {
       const previous = existingMap.get(id);
       let unlockedAt = previous?.unlockedAt ?? null;
 
       if (state === 1 && previous?.state !== 1) {
-        unlockedAt = new Date().toISOString();
+        unlockedAt = providedUnlocked ?? new Date().toISOString();
+      } else if (state === 1 && previous?.state === 1) {
+        unlockedAt = providedUnlocked ?? previous?.unlockedAt ?? new Date().toISOString();
       }
 
       if (state === 0) {
