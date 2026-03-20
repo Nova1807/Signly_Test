@@ -426,11 +426,11 @@ export class PasswordResetService {
               type="button"
               class="toggle-eye"
               data-target="password"
-              data-eye-open="https://storage.googleapis.com/signlydaten/Auge.svg"
-              data-eye-closed="https://storage.googleapis.com/signlydaten/Auge_zu.svg"
+              data-eye-show="https://storage.googleapis.com/signlydaten/Auge.svg"
+              data-eye-hide="https://storage.googleapis.com/signlydaten/Auge_zu.svg"
               aria-label="Passwort anzeigen"
             >
-              <img src="https://storage.googleapis.com/signlydaten/Auge_zu.svg" alt="" />
+              <img src="https://storage.googleapis.com/signlydaten/Auge.svg" alt="" />
             </button>
           </div>
 
@@ -441,11 +441,11 @@ export class PasswordResetService {
               type="button"
               class="toggle-eye"
               data-target="passwordConfirm"
-              data-eye-open="https://storage.googleapis.com/signlydaten/Auge.svg"
-              data-eye-closed="https://storage.googleapis.com/signlydaten/Auge_zu.svg"
+              data-eye-show="https://storage.googleapis.com/signlydaten/Auge.svg"
+              data-eye-hide="https://storage.googleapis.com/signlydaten/Auge_zu.svg"
               aria-label="Passwort anzeigen"
             >
-              <img src="https://storage.googleapis.com/signlydaten/Auge_zu.svg" alt="" />
+              <img src="https://storage.googleapis.com/signlydaten/Auge.svg" alt="" />
             </button>
           </div>
           <button class="btn" type="submit">Passwort speichern</button>
@@ -470,11 +470,11 @@ export class PasswordResetService {
       const newType = input.getAttribute('type') === 'password' ? 'text' : 'password';
       input.setAttribute('type', newType);
 
-      const openSrc = button.getAttribute('data-eye-open');
-      const closedSrc = button.getAttribute('data-eye-closed');
+      const showSrc = button.getAttribute('data-eye-show');
+      const hideSrc = button.getAttribute('data-eye-hide');
       const img = button.querySelector('img');
-      if (img && openSrc && closedSrc) {
-        img.src = newType === 'text' ? openSrc : closedSrc;
+      if (img && showSrc && hideSrc) {
+        img.src = newType === 'password' ? showSrc : hideSrc;
       }
       button.setAttribute('aria-label', newType === 'text' ? 'Passwort verbergen' : 'Passwort anzeigen');
     }

@@ -251,7 +251,7 @@ export function renderSuccessPageHtml(name: string) {
                 <img
                   src="${assetsBaseUrl}/Logo.png"
                   alt="Signly Logo"
-                  style="height: 36px; width: auto;"
+                  style="height: 48px; width: auto;"
                   loading="eager"
                 />
               </div>
@@ -486,7 +486,7 @@ export function renderExpiredPageHtml() {
 
           .logo img {
             display: block;
-            height: 36px;
+            height: 48px;
             width: auto;
           }
 
@@ -633,7 +633,7 @@ export function renderExpiredPageHtml() {
                 <img
                   src="${assetsBaseUrl}/Logo.png"
                   alt="Signly Logo"
-                  style="height: 36px; width: auto;"
+                  style="height: 48px; width: auto;"
                   loading="eager"
                 />
               </div>
