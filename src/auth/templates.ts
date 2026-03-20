@@ -89,7 +89,7 @@ export function renderSuccessPageHtml(name: string) {
 
           .logo img {
             display: block;
-            height: 48px;
+            height: 60px;
             width: auto;
           }
 
@@ -118,11 +118,11 @@ export function renderSuccessPageHtml(name: string) {
           }
 
           .app-icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 12px;
+            width: 60px;
+            height: 60px;
+            border-radius: 14px;
             border: 1px solid rgba(59,130,196,0.35);
-            box-shadow: 0 12px 24px rgba(15,23,42,0.22);
+            box-shadow: 0 14px 28px rgba(15,23,42,0.25);
             background: #ffffff;
             display: block;
           }
@@ -251,7 +251,7 @@ export function renderSuccessPageHtml(name: string) {
                 <img
                   src="${assetsBaseUrl}/Logo.png"
                   alt="Signly Logo"
-                  style="height: 48px; width: auto;"
+                  style="height: 60px; width: auto;"
                   loading="eager"
                 />
               </div>
@@ -486,7 +486,7 @@ export function renderExpiredPageHtml() {
 
           .logo img {
             display: block;
-            height: 48px;
+            height: 60px;
             width: auto;
           }
 
@@ -515,11 +515,11 @@ export function renderExpiredPageHtml() {
           }
 
           .app-icon {
-            width: 32px;
-            height: 32px;
-            border-radius: 10px;
+            width: 60px;
+            height: 60px;
+            border-radius: 14px;
             border: 1px solid rgba(248,113,113,0.6);
-            box-shadow: 0 8px 18px rgba(127,29,29,0.25);
+            box-shadow: 0 14px 28px rgba(127,29,29,0.3);
             background: #ffffff;
             display: block;
           }
@@ -633,7 +633,7 @@ export function renderExpiredPageHtml() {
                 <img
                   src="${assetsBaseUrl}/Logo.png"
                   alt="Signly Logo"
-                  style="height: 48px; width: auto;"
+                  style="height: 60px; width: auto;"
                   loading="eager"
                 />
               </div>

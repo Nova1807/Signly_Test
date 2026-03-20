@@ -214,7 +214,7 @@ export class PasswordResetService {
 
     .logo img {
       display: block;
-      height: 48px;
+      height: 60px;
       width: auto;
     }
 
@@ -234,11 +234,11 @@ export class PasswordResetService {
     }
 
     .app-icon {
-      width: 48px;
-      height: 48px;
-      border-radius: 12px;
+      width: 60px;
+      height: 60px;
+      border-radius: 14px;
       border: 1px solid rgba(59,130,196,0.35);
-      box-shadow: 0 12px 24px rgba(15,23,42,0.22);
+      box-shadow: 0 14px 28px rgba(15,23,42,0.25);
       background: #ffffff;
       display: block;
     }
@@ -393,7 +393,7 @@ export class PasswordResetService {
           <img
             src="https://storage.googleapis.com/signlydaten/schlange/Signly_logo_color_flatt2.png"
             alt="Signly Logo"
-            style="height: 48px; width: auto;"
+            style="height: 60px; width: auto;"
             loading="eager"
           />
         </div>
