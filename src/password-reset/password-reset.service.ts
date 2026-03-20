@@ -214,7 +214,7 @@ export class PasswordResetService {
 
     .logo img {
       display: block;
-      height: 36px;
+      height: 48px;
       width: auto;
     }
 
@@ -234,11 +234,11 @@ export class PasswordResetService {
     }
 
     .app-icon {
-      width: 32px;
-      height: 32px;
-      border-radius: 10px;
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
       border: 1px solid rgba(59,130,196,0.35);
-      box-shadow: 0 8px 18px rgba(15,23,42,0.18);
+      box-shadow: 0 12px 24px rgba(15,23,42,0.22);
       background: #ffffff;
       display: block;
     }
@@ -321,9 +321,9 @@ export class PasswordResetService {
       color: #64748b;
     }
 
-    .toggle-eye svg {
-      width: 18px;
-      height: 18px;
+    .toggle-eye img {
+      width: 22px;
+      height: 22px;
       display: block;
     }
 
@@ -393,7 +393,7 @@ export class PasswordResetService {
           <img
             src="https://storage.googleapis.com/signlydaten/schlange/Signly_logo_color_flatt2.png"
             alt="Signly Logo"
-            style="height: 36px; width: auto;"
+            style="height: 48px; width: auto;"
             loading="eager"
           />
         </div>
@@ -422,22 +422,30 @@ export class PasswordResetService {
           <label for="password">Neues Passwort</label>
           <div class="field">
             <input id="password" name="password" class="password-input" type="password" required minlength="8" />
-            <button type="button" class="toggle-eye" data-target="password" aria-label="Passwort anzeigen">
-              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path fill="currentColor" d="M12 5C7 5 3.1 8.1 1.5 12c1.6 3.9 5.5 7 10.5 7s8.9-3.1 10.5-7C20.9 8.1 17 5 12 5zm0 11.5A4.5 4.5 0 1 1 12 8.5a4.5 4.5 0 0 1 0 9z"/>
-                <circle cx="12" cy="12" r="2.5" fill="currentColor" />
-              </svg>
+            <button
+              type="button"
+              class="toggle-eye"
+              data-target="password"
+              data-eye-open="https://storage.googleapis.com/signlydaten/Auge.svg"
+              data-eye-closed="https://storage.googleapis.com/signlydaten/Auge_zu.svg"
+              aria-label="Passwort anzeigen"
+            >
+              <img src="https://storage.googleapis.com/signlydaten/Auge_zu.svg" alt="" />
             </button>
           </div>
 
           <label for="passwordConfirm">Neues Passwort bestätigen</label>
           <div class="field">
             <input id="passwordConfirm" name="passwordConfirm" class="password-input" type="password" required minlength="8" />
-            <button type="button" class="toggle-eye" data-target="passwordConfirm" aria-label="Passwort anzeigen">
-              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path fill="currentColor" d="M12 5C7 5 3.1 8.1 1.5 12c1.6 3.9 5.5 7 10.5 7s8.9-3.1 10.5-7C20.9 8.1 17 5 12 5zm0 11.5A4.5 4.5 0 1 1 12 8.5a4.5 4.5 0 0 1 0 9z"/>
-                <circle cx="12" cy="12" r="2.5" fill="currentColor" />
-              </svg>
+            <button
+              type="button"
+              class="toggle-eye"
+              data-target="passwordConfirm"
+              data-eye-open="https://storage.googleapis.com/signlydaten/Auge.svg"
+              data-eye-closed="https://storage.googleapis.com/signlydaten/Auge_zu.svg"
+              aria-label="Passwort anzeigen"
+            >
+              <img src="https://storage.googleapis.com/signlydaten/Auge_zu.svg" alt="" />
             </button>
           </div>
           <button class="btn" type="submit">Passwort speichern</button>
@@ -454,18 +462,25 @@ export class PasswordResetService {
     const passwordInput = document.getElementById('password');
     const passwordConfirmInput = document.getElementById('passwordConfirm');
 
-    function toggleVisibility(targetId) {
-      const input = document.getElementById(targetId);
+    function toggleVisibility(button) {
+      if (!button) return;
+      const targetId = button.getAttribute('data-target');
+      const input = targetId ? document.getElementById(targetId) : null;
       if (!input) return;
-      const type = input.getAttribute('type') === 'password' ? 'text' : 'password';
-      input.setAttribute('type', type);
+      const newType = input.getAttribute('type') === 'password' ? 'text' : 'password';
+      input.setAttribute('type', newType);
+
+      const openSrc = button.getAttribute('data-eye-open');
+      const closedSrc = button.getAttribute('data-eye-closed');
+      const img = button.querySelector('img');
+      if (img && openSrc && closedSrc) {
+        img.src = newType === 'text' ? openSrc : closedSrc;
+      }
+      button.setAttribute('aria-label', newType === 'text' ? 'Passwort verbergen' : 'Passwort anzeigen');
     }
 
     document.querySelectorAll('.toggle-eye').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const target = btn.getAttribute('data-target');
-        toggleVisibility(target);
-      });
+      btn.addEventListener('click', () => toggleVisibility(btn));
     });
 
     form.addEventListener('submit', async (e) => {
@@ -511,8 +526,11 @@ export class PasswordResetService {
         const data = await res.json();
         if (data && data.success) {
           successDiv.style.display = 'block';
-          form.querySelector('button').disabled = true;
-          form.querySelector('input[type="password"]').disabled = true;
+          form.querySelectorAll('input, button').forEach((el) => {
+            if (el.type !== 'hidden') {
+              el.disabled = true;
+            }
+          });
         } else {
           errorDiv.style.display = 'block';
         }
