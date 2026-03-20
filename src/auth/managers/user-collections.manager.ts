@@ -149,7 +149,10 @@ export class UserCollectionsManager {
       .map(([id, percentage]) => [id, percentage]);
   }
 
-  private normalizeBadgesMatrix(value: any, strict = false): number[][] {
+  private normalizeBadgesMatrix(
+    value: any,
+    strict = false,
+  ): Array<[number, number, string | null]> {
     if (!Array.isArray(value)) {
       if (strict && value !== undefined) {
         throw new BadRequestException('badges muss ein zweidimensionales Array sein');
@@ -157,28 +160,37 @@ export class UserCollectionsManager {
       return [];
     }
 
-    const result = new Map<number, number>();
+    const result = new Map<number, { state: number; unlockedAt: string | null }>();
 
-    for (const rawEntry of value) {
-      if (rawEntry === undefined || rawEntry === null) {
-        continue;
+    const normalizeUnlockedAt = (raw: any): string | null => {
+      if (typeof raw !== 'string') {
+        return null;
       }
-
-      let idValue: any;
-      let stateValue: any;
-
-      if (Array.isArray(rawEntry) && rawEntry.length >= 2) {
-        [idValue, stateValue] = rawEntry;
-      } else if (typeof rawEntry === 'object') {
-        idValue = (rawEntry as any).badgeId ?? (rawEntry as any).id;
-        stateValue = (rawEntry as any).value ?? (rawEntry as any).state;
-      } else {
-        if (strict) {
-          throw new BadRequestException('badges erwartet [badgeId, wert] oder entsprechende Objekte');
-        }
-        continue;
+      const trimmed = raw.trim();
+      if (!trimmed) {
+        return null;
       }
+      const parsed = new Date(trimmed);
+      if (Number.isNaN(parsed.getTime())) {
+        return null;
+      }
+      return parsed.toISOString();
+    };
 
+    const allowLegacyMatrixFormat = !strict;
+    const isLegacyMatrixFormat =
+      allowLegacyMatrixFormat &&
+      (value.length === 2 || value.length === 3) &&
+      Array.isArray(value[0]) &&
+      Array.isArray(value[1]) &&
+      value[0].length === value[1].length &&
+      value[0].every((entry: any) => Number.isFinite(Number(entry))) &&
+      value[1].every((entry: any) => {
+        const numeric = Number(entry);
+        return Number.isFinite(numeric) && (numeric === 0 || numeric === 1);
+      });
+
+    const pushEntry = (idValue: any, stateValue: any, unlockedValue: any, allowUnlockedInput: boolean) => {
       const numericId = Number(idValue);
       const numericState = Number(stateValue);
 
@@ -186,7 +198,7 @@ export class UserCollectionsManager {
         if (strict) {
           throw new BadRequestException('badges benötigt numerische badgeId und wert');
         }
-        continue;
+        return;
       }
 
       const normalizedId = Math.floor(numericId);
@@ -194,23 +206,62 @@ export class UserCollectionsManager {
         if (strict) {
           throw new BadRequestException('badgeId darf nicht negativ sein');
         }
-        continue;
+        return;
       }
 
       if (numericState !== 0 && numericState !== 1) {
         if (strict) {
           throw new BadRequestException('badge-wert darf nur 0 oder 1 sein');
         }
-        continue;
+        return;
       }
 
-      result.set(normalizedId, numericState);
+      result.set(normalizedId, {
+        state: numericState,
+        unlockedAt: allowUnlockedInput ? normalizeUnlockedAt(unlockedValue) : null,
+      });
+    };
+
+    if (isLegacyMatrixFormat) {
+      const [ids, states, timestamps] = value as [any[], any[], any[]?];
+      const unlockedList = Array.isArray(timestamps) ? timestamps : [];
+      ids.forEach((idValue, index) => {
+        pushEntry(idValue, states[index], unlockedList[index], true);
+      });
+    } else {
+      for (const rawEntry of value) {
+        if (rawEntry === undefined || rawEntry === null) {
+          continue;
+        }
+
+        let idValue: any;
+        let stateValue: any;
+        let unlockedValue: any;
+
+        if (Array.isArray(rawEntry) && rawEntry.length >= 2) {
+          [idValue, stateValue, unlockedValue] = rawEntry;
+        } else if (typeof rawEntry === 'object') {
+          idValue = (rawEntry as any).badgeId ?? (rawEntry as any).id;
+          stateValue = (rawEntry as any).value ?? (rawEntry as any).state;
+          unlockedValue =
+            (rawEntry as any).unlockedAt ??
+            (rawEntry as any).unlockDate ??
+            (rawEntry as any).timestamp;
+        } else {
+          if (strict) {
+            throw new BadRequestException(
+              'badges erwartet [badgeId, wert] oder entsprechende Objekte',
+            );
+          }
+          continue;
+        }
+
+        pushEntry(idValue, stateValue, unlockedValue, !strict);
+      }
     }
 
     const sorted = Array.from(result.entries()).sort((a, b) => a[0] - b[0]);
-    const ids = sorted.map(([id]) => id);
-    const states = sorted.map(([, state]) => state);
-    return [ids, states];
+    return sorted.map(([id, payload]) => [id, payload.state, payload.unlockedAt ?? null]);
   }
 
   async ensureUserCollections(
@@ -492,10 +543,32 @@ export class UserCollectionsManager {
   }
 
   async updateBadges(userId: string, badges: number[][]) {
-    const sanitized = this.normalizeBadgesMatrix(badges, true);
-    const { userRef } = await this.getUserDocument(userId);
-    await userRef.update({ badges: sanitized });
-    return { badges: sanitized };
+    const incoming = this.normalizeBadgesMatrix(badges, true);
+    const { userDoc, userRef } = await this.getUserDocument(userId);
+    const existing = this.normalizeBadgesMatrix((userDoc.data() as any)?.badges);
+
+    const existingMap = new Map<number, { state: number; unlockedAt: string | null }>();
+    existing.forEach(([id, state, unlockedAt]) => {
+      existingMap.set(id, { state, unlockedAt: unlockedAt ?? null });
+    });
+
+    const updated = incoming.map(([id, state]) => {
+      const previous = existingMap.get(id);
+      let unlockedAt = previous?.unlockedAt ?? null;
+
+      if (state === 1 && previous?.state !== 1) {
+        unlockedAt = new Date().toISOString();
+      }
+
+      if (state === 0) {
+        unlockedAt = null;
+      }
+
+      return [id, state, unlockedAt] as [number, number, string | null];
+    });
+
+    await userRef.update({ badges: updated });
+    return { badges: updated };
   }
 
   async getProfileAbout(userId: string) {
