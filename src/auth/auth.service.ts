@@ -1,36 +1,22 @@
-import {
-  BadRequestException,
-  Injectable,
-  UnauthorizedException,
-  Inject,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, Inject, Logger } from '@nestjs/common';
 import { SignupDto } from './dto/signup.dto';
 import * as admin from 'firebase-admin';
 import 'firebase-admin/storage';
-import * as bcrypt from 'bcrypt';
 import { LoginDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
-import { v4 as uuidv4 } from 'uuid';
 import { MailerService } from './mailer.service';
 import words from './words.json';
 import { UpdateProfileDto } from './update-profile.dto';
-import sharp from 'sharp';
 import { ImageModerationService } from './image-moderation.service';
-import {
-  formatLogContext,
-  hasValue,
-  maskEmail,
-  maskId,
-  maskIdentifier,
-  maskToken,
-} from '../common/logging/redaction';
-export type AvatarUploadFile = {
-  buffer: Buffer;
-  mimetype: string;
-  size: number;
-};
+import { formatLogContext, maskId } from '../common/logging/redaction';
+import { AvatarManager } from './managers/avatar.manager';
+import type { AvatarUploadFile } from './managers/avatar.manager';
+import { FriendshipManager } from './managers/friendship.manager';
+import { UserCollectionsManager } from './managers/user-collections.manager';
+import { AccountManager } from './managers/account.manager';
+import { SessionManager } from './managers/session.manager';
 
+export type { AvatarUploadFile } from './managers/avatar.manager';
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -67,6 +53,11 @@ export class AuthService {
   private readonly refreshTokenCleanupBatchSize = Number(
     process.env.REFRESH_TOKEN_CLEANUP_BATCH_SIZE ?? 500,
   );
+  private readonly userCollectionsManager: UserCollectionsManager;
+  private readonly avatarManager: AvatarManager;
+  private readonly friendshipManager: FriendshipManager;
+  private readonly accountManager: AccountManager;
+  private readonly sessionManager: SessionManager;
 
   // words.json ist ein reines Array von Strings
   private readonly forbiddenWords: string[] = (words as string[])
@@ -78,68 +69,53 @@ export class AuthService {
     private jwtService: JwtService,
     private mailerService: MailerService,
     private readonly imageModerationService: ImageModerationService,
-  ) {}
-
-  private validateNameAgainstForbiddenWords(name: string): void {
-    const nameLower = (name || '').toLowerCase();
-
-    const hit = this.forbiddenWords.find((word) => {
-      const w = word.toLowerCase();
-      if (!w) return false;
-      return nameLower.includes(w);
+  ) {
+    this.userCollectionsManager = new UserCollectionsManager({
+      firebaseApp: this.firebaseApp,
+      logger: this.logger,
+      lessonIdSet: this.lessonIdSet,
+      testIdSet: this.testIdSet,
     });
 
-    if (hit) {
-      this.logger.warn(`signup: forbidden name "${name}" contains "${hit}"`);
-      throw new BadRequestException('Dieser Benutzername ist nicht erlaubt');
-    }
+    this.avatarManager = new AvatarManager({
+      firebaseApp: this.firebaseApp,
+      logger: this.logger,
+      avatarFolder: this.avatarFolder,
+      maxAvatarBytes: this.maxAvatarBytes,
+      allowedAvatarMimeTypes: this.allowedAvatarMimeTypes,
+      avatarSignedUrlExpiresInMs: this.avatarSignedUrlExpiresInMs,
+      avatarJpegQuality: this.avatarJpegQuality,
+      avatarWebpQuality: this.avatarWebpQuality,
+      avatarPngCompressionLevel: this.avatarPngCompressionLevel,
+      imageModerationService: this.imageModerationService,
+      userCollectionsManager: this.userCollectionsManager,
+    });
+
+    this.friendshipManager = new FriendshipManager({
+      firebaseApp: this.firebaseApp,
+      friendshipsCollection: this.friendshipsCollection,
+      friendRequestsCollection: this.friendRequestsCollection,
+      avatarManager: this.avatarManager,
+    });
+
+    this.accountManager = new AccountManager({
+      firebaseApp: this.firebaseApp,
+      logger: this.logger,
+      mailerService: this.mailerService,
+      verificationCleanupBatchSize: this.verificationCleanupBatchSize,
+      forbiddenWords: this.forbiddenWords,
+    });
+
+    this.sessionManager = new SessionManager({
+      firebaseApp: this.firebaseApp,
+      logger: this.logger,
+      jwtService: this.jwtService,
+      userCollectionsManager: this.userCollectionsManager,
+      refreshTokenCleanupBatchSize: this.refreshTokenCleanupBatchSize,
+    });
   }
 
-  /**
-   * Login-Streak aktualisieren.
-   * Nutzt lastLoginDate (YYYY-MM-DD) + loginStreak + longestLoginStreak im User-Dokument.
-   */
-  private updateLoginStreak(
-    user: any,
-    now: Date,
-  ): { loginStreak: number; longestLoginStreak: number; lastLoginDate: string } {
-    const currentDate = now.toISOString().slice(0, 10); // YYYY-MM-DD
-
-    const last = user.lastLoginDate as string | undefined;
-    let loginStreak = user.loginStreak as number | undefined;
-    let longestLoginStreak = user.longestLoginStreak as number | undefined;
-
-    if (!last) {
-      // erster Login
-      loginStreak = 1;
-    } else {
-      const lastDate = new Date(last);
-      const diffDays = Math.floor(
-        (Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) -
-          Date.UTC(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate())) /
-          (1000 * 60 * 60 * 24),
-      );
-
-      if (diffDays === 0) {
-        // heute schon eingeloggt → Streak bleibt
-        loginStreak = loginStreak || 1;
-      } else if (diffDays === 1) {
-        // gestern → Streak +1
-        loginStreak = (loginStreak || 0) + 1;
-      } else {
-        // Lücke → reset
-        loginStreak = 1;
-      }
-    }
-
-    longestLoginStreak = Math.max(longestLoginStreak || 0, loginStreak || 0);
-
-    return {
-      loginStreak,
-      longestLoginStreak,
-      lastLoginDate: currentDate,
-    };
-  }
+  // further logic delegated to specialized managers
 
   private buildIndexList(idsCsv?: string, count?: number): number[] {
     const parsedFromCsv =
@@ -173,655 +149,24 @@ export class AuthService {
     return Math.max(0, Math.min(9, Math.round(value)));
   }
 
-  private getMatrixKey(kind: 'lesson' | 'test'): 'lessonPerformanceMatrix' | 'testPerformanceMatrix' {
-    return kind === 'lesson' ? 'lessonPerformanceMatrix' : 'testPerformanceMatrix';
-  }
-
-  private getAllowedIdSet(kind: 'lesson' | 'test'): Set<number> | undefined {
-    const source = kind === 'lesson' ? this.lessonIdSet : this.testIdSet;
-    return source.size > 0 ? source : undefined;
-  }
-
-  private normalizePerformanceMatrixInput(
-    value: any,
-    kind: 'lesson' | 'test',
-    strict = false,
-  ): number[][] {
-    const allowedSet = this.getAllowedIdSet(kind);
-
-    if (!Array.isArray(value)) {
-      if (strict && value !== undefined) {
-        throw new BadRequestException(
-          kind === 'lesson'
-            ? 'lessonPerformanceMatrix muss ein Array sein'
-            : 'testPerformanceMatrix muss ein Array sein',
-        );
-      }
-      return [];
-    }
-
-    const sanitized = new Map<number, number>();
-
-    for (const rawEntry of value) {
-      if (rawEntry == null) {
-        if (strict) {
-          throw new BadRequestException('Performance-Einträge dürfen nicht leer sein');
-        }
-        continue;
-      }
-
-      let idValue: any;
-      let percentageValue: any;
-
-      if (Array.isArray(rawEntry) && rawEntry.length >= 2) {
-        [idValue, percentageValue] = rawEntry;
-      } else if (typeof rawEntry === 'object') {
-        idValue =
-          (rawEntry as any).lessonId ??
-          (rawEntry as any).testId ??
-          (rawEntry as any).id ??
-          (rawEntry as any).index;
-        percentageValue =
-          (rawEntry as any).percentage ?? (rawEntry as any).value ?? (rawEntry as any).progress;
-      } else {
-        if (strict) {
-          throw new BadRequestException(
-            kind === 'lesson'
-              ? 'lessonPerformanceMatrix erwartet lessonId & percentage'
-              : 'testPerformanceMatrix erwartet testId & percentage',
-          );
-        }
-        continue;
-      }
-
-      const numericId = Number(idValue);
-      const numericPercentage = Number(percentageValue);
-
-      if (!Number.isFinite(numericId) || !Number.isFinite(numericPercentage)) {
-        if (strict) {
-          throw new BadRequestException(
-            kind === 'lesson'
-              ? 'lessonPerformanceMatrix benötigt numerische lessonId & percentage'
-              : 'testPerformanceMatrix benötigt numerische testId & percentage',
-          );
-        }
-        continue;
-      }
-
-      const normalizedId = Math.floor(numericId);
-      if (allowedSet && !allowedSet.has(normalizedId)) {
-        const message = kind === 'lesson' ? 'Unknown lessonId' : 'Unknown testId';
-        if (strict) {
-          throw new BadRequestException(message);
-        }
-        continue;
-      }
-
-      sanitized.set(normalizedId, this.clampPercentage(numericPercentage));
-    }
-
-    return Array.from(sanitized.entries())
-      .sort((a, b) => a[0] - b[0])
-      .map(([id, percentage]) => [id, percentage]);
-  }
-
-  private arraysEqual(a: any, b: any): boolean {
-    return JSON.stringify(a ?? []) === JSON.stringify(b ?? []);
-  }
-
-  private normalizeStringArray(value: any): string[] {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-    const seen = new Set<string>();
-    const normalized: string[] = [];
-    for (const entry of value) {
-      if (typeof entry !== 'string') {
-        continue;
-      }
-      const trimmed = entry.trim();
-      if (!trimmed || seen.has(trimmed)) {
-        continue;
-      }
-      normalized.push(trimmed);
-      seen.add(trimmed);
-    }
-    return normalized;
-  }
-
-  private sanitizeStringArrayInput(value: any, fieldName: string): string[] {
-    if (!Array.isArray(value)) {
-      throw new BadRequestException(`${fieldName} muss ein Array aus Strings sein`);
-    }
-    const invalid = value.some((entry) => typeof entry !== 'string');
-    if (invalid) {
-      throw new BadRequestException(`${fieldName} darf nur Strings enthalten`);
-    }
-    return this.normalizeStringArray(value);
-  }
-
-  private normalizeBadgesMatrix(
-    value: any,
-    strict = false,
-  ): number[][] {
-    if (!Array.isArray(value)) {
-      if (strict && value !== undefined) {
-        throw new BadRequestException('badges muss ein zweidimensionales Array sein');
-      }
-      return [];
-    }
-
-    const result = new Map<number, number>();
-
-    if (value.length > 0 && !Array.isArray(value[0])) {
-      value.forEach((rawValue: any, index: number) => {
-        const v = Number(rawValue);
-        if (!Number.isFinite(v)) {
-          if (strict) {
-            throw new BadRequestException('badges darf nur 0 oder 1 enthalten');
-          }
-          return;
-        }
-        if (v !== 0 && v !== 1) {
-          if (strict) {
-            throw new BadRequestException('badges darf nur 0 oder 1 enthalten');
-          }
-          return;
-        }
-        result.set(index, v);
-      });
-
-      const sorted = Array.from(result.entries()).sort((a, b) => a[0] - b[0]);
-      const ids = sorted.map(([id]) => id);
-      const states = sorted.map(([, state]) => state);
-      return [ids, states];
-    }
-
-    if (
-      value.length === 2 &&
-      Array.isArray(value[0]) &&
-      Array.isArray(value[1])
-    ) {
-      const idsRaw = value[0];
-      const statesRaw = value[1];
-
-      if (idsRaw.length !== statesRaw.length) {
-        if (strict) {
-          throw new BadRequestException('badges: Länge von Index- und Wert-Array muss gleich sein');
-        }
-      }
-
-      const len = Math.min(idsRaw.length, statesRaw.length);
-
-      for (let i = 0; i < len; i++) {
-        const idValue = idsRaw[i];
-        const stateValue = statesRaw[i];
-
-        const numericId = Number(idValue);
-        const numericState = Number(stateValue);
-
-        if (!Number.isFinite(numericId) || !Number.isFinite(numericState)) {
-          if (strict) {
-            throw new BadRequestException('badges benötigt numerische badgeId und wert');
-          }
-          continue;
-        }
-
-        const normalizedId = Math.floor(numericId);
-        if (normalizedId < 0) {
-          if (strict) {
-            throw new BadRequestException('badgeId darf nicht negativ sein');
-          }
-          continue;
-        }
-
-        if (numericState !== 0 && numericState !== 1) {
-          if (strict) {
-            throw new BadRequestException('badge-wert darf nur 0 oder 1 sein');
-          }
-          continue;
-        }
-
-        result.set(normalizedId, numericState);
-      }
-
-      const sorted = Array.from(result.entries()).sort((a, b) => a[0] - b[0]);
-      const ids = sorted.map(([id]) => id);
-      const states = sorted.map(([, state]) => state);
-      return [ids, states];
-    }
-
-    // 3) Fallback: array-of-pairs [[id, state], ...] oder Objektform
-    for (const rawEntry of value) {
-      if (rawEntry == null) {
-        if (strict) {
-          throw new BadRequestException('badge-Einträge dürfen nicht leer sein');
-        }
-        continue;
-      }
-
-      let idValue: any;
-      let stateValue: any;
-
-      if (Array.isArray(rawEntry) && rawEntry.length >= 2) {
-        [idValue, stateValue] = rawEntry;
-      } else if (typeof rawEntry === 'object') {
-        idValue = (rawEntry as any).badgeId ?? (rawEntry as any).id;
-        stateValue = (rawEntry as any).value ?? (rawEntry as any).state;
-      } else {
-        if (strict) {
-          throw new BadRequestException('badges erwartet [badgeId, wert] oder entsprechende Objekte');
-        }
-        continue;
-      }
-
-      const numericId = Number(idValue);
-      const numericState = Number(stateValue);
-
-      if (!Number.isFinite(numericId) || !Number.isFinite(numericState)) {
-        if (strict) {
-          throw new BadRequestException('badges benötigt numerische badgeId und wert');
-        }
-        continue;
-      }
-
-      const normalizedId = Math.floor(numericId);
-      if (normalizedId < 0) {
-        if (strict) {
-          throw new BadRequestException('badgeId darf nicht negativ sein');
-        }
-        continue;
-      }
-
-      if (numericState !== 0 && numericState !== 1) {
-        if (strict) {
-          throw new BadRequestException('badge-wert darf nur 0 oder 1 sein');
-        }
-        continue;
-      }
-
-      result.set(normalizedId, numericState);
-    }
-
-    const sorted = Array.from(result.entries()).sort((a, b) => a[0] - b[0]);
-    const ids = sorted.map(([id]) => id);
-    const states = sorted.map(([, state]) => state);
-    return [ids, states];
-  }
-
-  private getStorageBucket() {
-    return this.firebaseApp.storage().bucket();
-  }
-
   private getFirestore() {
     return this.firebaseApp.firestore();
   }
 
-  private detectAvatarExtension(mimeType: string) {
-    if (mimeType === 'image/png') return 'png';
-    if (mimeType === 'image/webp') return 'webp';
-    return 'jpg';
-  }
-
-  private validateAvatarMagicBytes(buffer: Buffer, mimeType: string) {
-    if (mimeType === 'image/png') {
-      return buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47;
-    }
-
-    if (mimeType === 'image/jpeg') {
-      return buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[buffer.length - 2] === 0xff && buffer[buffer.length - 1] === 0xd9;
-    }
-
-    if (mimeType === 'image/webp') {
-      return (
-        buffer[0] === 0x52 && // R
-        buffer[1] === 0x49 && // I
-        buffer[2] === 0x46 && // F
-        buffer[3] === 0x46 && // F
-        buffer[8] === 0x57 && // W
-        buffer[9] === 0x45 && // E
-        buffer[10] === 0x42 && // B
-        buffer[11] === 0x50
-      );
-    }
-
-    return false;
-  }
-
-  private normalizeAvatarMimeType(mimeType: string) {
-    if (mimeType === 'image/jpg') return 'image/jpeg';
-    if (mimeType === 'image/x-png') return 'image/png';
-    return mimeType;
-  }
-
-  private sanitizeAvatarFile(file?: AvatarUploadFile) {
-    if (!file) {
-      throw new BadRequestException('avatar-Datei fehlt');
-    }
-
-    if (!file.buffer || !file.buffer.length) {
-      throw new BadRequestException('avatar-Datei konnte nicht gelesen werden');
-    }
-
-    if (file.buffer.length > this.maxAvatarBytes) {
-      throw new BadRequestException(
-        `Avatar ist zu groß (max ${(this.maxAvatarBytes / (1024 * 1024)).toFixed(1)}MB)`,
-      );
-    }
-
-    const mimeType = this.normalizeAvatarMimeType((file.mimetype || '').toLowerCase());
-    if (!this.allowedAvatarMimeTypes.has(mimeType)) {
-      throw new BadRequestException('Unterstützte Avatar-Typen: PNG, JPEG, WEBP');
-    }
-
-    if (file.buffer.length < 4) {
-      throw new BadRequestException('Ungültiges Bildformat');
-    }
-
-    if (!this.validateAvatarMagicBytes(file.buffer, mimeType)) {
-      throw new BadRequestException('Ungültiges Bildformat');
-    }
-
-    return { buffer: file.buffer, mimeType };
-  }
-
-  private async prepareAvatarFile(file?: AvatarUploadFile) {
-    const sanitized = this.sanitizeAvatarFile(file);
-    return this.optimizeAvatarBuffer(sanitized.buffer, sanitized.mimeType);
-  }
-
-  private async optimizeAvatarBuffer(buffer: Buffer, mimeType: string) {
-    try {
-      let optimized: Buffer;
-
-      if (mimeType === 'image/png') {
-        optimized = await sharp(buffer, { failOnError: true })
-          .rotate()
-          .png({
-            compressionLevel: this.avatarPngCompressionLevel,
-            adaptiveFiltering: true,
-          })
-          .toBuffer();
-      } else if (mimeType === 'image/webp') {
-        optimized = await sharp(buffer, { failOnError: true })
-          .rotate()
-          .webp({
-            quality: this.avatarWebpQuality,
-            effort: 4,
-          })
-          .toBuffer();
-      } else {
-        optimized = await sharp(buffer, { failOnError: true })
-          .rotate()
-          .jpeg({
-            quality: this.avatarJpegQuality,
-            mozjpeg: true,
-          })
-          .toBuffer();
-      }
-
-      return { buffer: optimized, mimeType };
-    } catch (err: any) {
-      this.logger.warn(
-        `optimizeAvatarBuffer: returning original buffer due to error: ${err?.message}`,
-      );
-      return { buffer, mimeType };
-    }
-  }
-
-
-  private async ensureUserCollections(
-    userDoc: admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot,
-  ): Promise<void> {
-    const data = userDoc.data();
-    if (!data) return;
-
-    const updates: Record<string, any> = {};
-
-    const normalizedLesson = this.normalizePerformanceMatrixInput(
-      data.lessonPerformanceMatrix,
-      'lesson',
-    );
-    if (!this.arraysEqual(data.lessonPerformanceMatrix, normalizedLesson)) {
-      updates.lessonPerformanceMatrix = normalizedLesson;
-    }
-
-    const normalizedTest = this.normalizePerformanceMatrixInput(data.testPerformanceMatrix, 'test');
-    if (!this.arraysEqual(data.testPerformanceMatrix, normalizedTest)) {
-      updates.testPerformanceMatrix = normalizedTest;
-    }
-
-    const normalizedDictionary = this.normalizeStringArray(data.dictionaryEntries);
-    if (!this.arraysEqual(data.dictionaryEntries, normalizedDictionary)) {
-      updates.dictionaryEntries = normalizedDictionary;
-    }
-
-    const normalizedFavorites = this.normalizeStringArray(data.favoriteGestures);
-    if (!this.arraysEqual(data.favoriteGestures, normalizedFavorites)) {
-      updates.favoriteGestures = normalizedFavorites;
-    }
-
-    const normalizedBadges = this.normalizeBadgesMatrix((data as any).badges);
-    if (!this.arraysEqual((data as any).badges, normalizedBadges)) {
-      updates.badges = normalizedBadges;
-    }
-
-    if (Object.keys(updates).length > 0) {
-      await userDoc.ref.update(updates);
-      this.logger.log(
-        'ensureUserCollections: normalized arrays' +
-          formatLogContext({
-            userId: maskId(userDoc.id),
-            updatedFields: Object.keys(updates),
-          }),
-      );
-    }
-  }
-
-  private async getUserDocument(userId: string) {
-    const firestore = this.firebaseApp.firestore();
-    const userRef = firestore.collection('users').doc(userId);
-    const userDoc = await userRef.get();
-    if (!userDoc.exists) {
-      this.logger.warn(
-        'getUserDocument: user not found' +
-          formatLogContext({
-            userId: maskId(userId),
-          }),
-      );
-      throw new BadRequestException('User not found');
-    }
-    await this.ensureUserCollections(userDoc);
-    return { userDoc, userRef };
-  }
-
-  private async cleanupExpiredEmailVerificationTokens(): Promise<void> {
-    const firestore = this.firebaseApp.firestore();
-    const nowTimestamp = admin.firestore.Timestamp.fromDate(new Date());
-    let totalDeleted = 0;
-
-    while (true) {
-      const snapshot = await firestore
-        .collection('emailVerifications')
-        .where('expiresAt', '<=', nowTimestamp)
-        .limit(this.verificationCleanupBatchSize)
-        .get();
-
-      if (snapshot.empty) {
-        break;
-      }
-
-      const batch = firestore.batch();
-      snapshot.docs.forEach((doc) => batch.delete(doc.ref));
-      await batch.commit();
-      totalDeleted += snapshot.size;
-
-      if (snapshot.size < this.verificationCleanupBatchSize) {
-        break;
-      }
-    }
-
-    if (totalDeleted > 0) {
-      this.logger.log(`cleanupExpiredEmailVerificationTokens: deleted ${totalDeleted} expired docs`);
-    }
-  }
-
-  private async updatePerformanceMatrix(
-    userId: string,
-    matrixKey: 'lessonPerformanceMatrix' | 'testPerformanceMatrix',
-    entryId: number,
-    percentage: number,
-  ): Promise<number[][]> {
-    const kind: 'lesson' | 'test' =
-      matrixKey === 'lessonPerformanceMatrix' ? 'lesson' : 'test';
-    const allowedSet = this.getAllowedIdSet(kind);
-    const normalizedEntryId = Math.floor(Number(entryId));
-
-    if (!Number.isFinite(normalizedEntryId)) {
-      this.logger.warn(
-        'updatePerformanceMatrix: invalid entry id' +
-          formatLogContext({
-            kind,
-            entryId,
-            userId: maskId(userId),
-          }),
-      );
-      throw new BadRequestException(
-        kind === 'lesson' ? 'lessonId ist ungültig' : 'testId ist ungültig',
-      );
-    }
-
-    if (allowedSet && !allowedSet.has(normalizedEntryId)) {
-      this.logger.warn(
-        `updatePerformanceMatrix: entryId ${normalizedEntryId} not allowed for ${matrixKey}`,
-      );
-      throw new BadRequestException(
-        matrixKey === 'lessonPerformanceMatrix'
-          ? 'Unknown lessonId'
-          : 'Unknown testId',
-      );
-    }
-
-    const firestore = this.firebaseApp.firestore();
-    const clampedPercentage = this.clampPercentage(percentage);
-    const userRef = firestore.collection('users').doc(userId);
-
-    const updatedMatrix = await firestore.runTransaction(async (tx) => {
-      const userSnap = await tx.get(userRef);
-      if (!userSnap.exists) {
-        this.logger.warn(
-          'updatePerformanceMatrix: user not found' +
-            formatLogContext({
-              userId: maskId(userId),
-            }),
-        );
-        throw new BadRequestException('User not found');
-      }
-
-      const data = userSnap.data() || {};
-      const matrix = this.normalizePerformanceMatrixInput(data[matrixKey], kind);
-      const next = this.mergePerformanceEntry(matrix, normalizedEntryId, clampedPercentage);
-
-      tx.update(userRef, {
-        [matrixKey]: next,
-      });
-
-      return next;
-    });
-
-    this.logger.log(
-      'updatePerformanceMatrix: updated entry' +
-        formatLogContext({
-          matrixKey,
-          userId: maskId(userId),
-          entryId: normalizedEntryId,
-          percentage: clampedPercentage,
-        }),
-    );
-
-    return updatedMatrix;
-  }
-
-  private mergePerformanceEntry(matrix: number[][], entryId: number, percentage: number) {
-    const next = matrix.map(([id, value]) => [id, value]);
-    const existingIndex = next.findIndex(([id]) => id === entryId);
-
-    if (existingIndex >= 0) {
-      next[existingIndex][1] = percentage;
-    } else {
-      next.push([entryId, percentage]);
-    }
-
-    next.sort((a, b) => a[0] - b[0]);
-    return next;
-  }
-
-  private async replacePerformanceMatrix(
-    userId: string,
-    kind: 'lesson' | 'test',
-    entries: { id: number; percentage: number }[],
-  ): Promise<number[][]> {
-    const matrixKey = this.getMatrixKey(kind);
-    const payload = entries.map((entry) => [entry.id, entry.percentage]);
-    const normalized = this.normalizePerformanceMatrixInput(payload, kind, true);
-    const { userRef } = await this.getUserDocument(userId);
-
-    await userRef.update({
-      [matrixKey]: normalized,
-    });
-
-    this.logger.log(
-      'replacePerformanceMatrix: replaced matrix' +
-        formatLogContext({
-          matrixKey,
-          userId: maskId(userId),
-          entries: normalized.length,
-        }),
-    );
-
-    return normalized;
-  }
-
   async getLessonPerformance(userId: string) {
-    const { userDoc } = await this.getUserDocument(userId);
-    const data = userDoc.data() as any;
-    return {
-      lessonPerformanceMatrix: this.normalizePerformanceMatrixInput(
-        data?.lessonPerformanceMatrix,
-        'lesson',
-      ),
-    };
+    return this.userCollectionsManager.getLessonPerformance(userId);
   }
 
   async updateLessonPerformance(userId: string, lessonId: number, percentage: number) {
-    const lessonPerformanceMatrix = await this.updatePerformanceMatrix(
-      userId,
-      'lessonPerformanceMatrix',
-      lessonId,
-      percentage,
-    );
-    return { lessonPerformanceMatrix };
+    return this.userCollectionsManager.updateLessonPerformance(userId, lessonId, percentage);
   }
 
   async getTestPerformance(userId: string) {
-    const { userDoc } = await this.getUserDocument(userId);
-    const data = userDoc.data() as any;
-    return {
-      testPerformanceMatrix: this.normalizePerformanceMatrixInput(
-        data?.testPerformanceMatrix,
-        'test',
-      ),
-    };
+    return this.userCollectionsManager.getTestPerformance(userId);
   }
 
   async updateTestPerformance(userId: string, testId: number, percentage: number) {
-    const testPerformanceMatrix = await this.updatePerformanceMatrix(
-      userId,
-      'testPerformanceMatrix',
-      testId,
-      percentage,
-    );
-    return { testPerformanceMatrix };
+    return this.userCollectionsManager.updateTestPerformance(userId, testId, percentage);
   }
 
   async setLessonPerformanceMatrix(
@@ -832,12 +177,7 @@ export class AuthService {
       id: entry.lessonId,
       percentage: entry.percentage,
     }));
-    const lessonPerformanceMatrix = await this.replacePerformanceMatrix(
-      userId,
-      'lesson',
-      payload,
-    );
-    return { lessonPerformanceMatrix };
+    return this.userCollectionsManager.setLessonPerformanceMatrix(userId, payload);
   }
 
   async setTestPerformanceMatrix(
@@ -848,801 +188,87 @@ export class AuthService {
       id: entry.testId,
       percentage: entry.percentage,
     }));
-    const testPerformanceMatrix = await this.replacePerformanceMatrix(userId, 'test', payload);
-    return { testPerformanceMatrix };
+    return this.userCollectionsManager.setTestPerformanceMatrix(userId, payload);
   }
 
   async getDictionaryEntries(userId: string) {
-    const { userDoc } = await this.getUserDocument(userId);
-    const data = userDoc.data() as any;
-    return {
-      dictionaryEntries: this.normalizeStringArray(data?.dictionaryEntries),
-    };
+    return this.userCollectionsManager.getDictionaryEntries(userId);
   }
 
   async updateDictionaryEntries(userId: string, entries: string[]) {
-    const sanitized = this.sanitizeStringArrayInput(entries, 'dictionaryEntries');
-    const { userRef } = await this.getUserDocument(userId);
-    await userRef.update({ dictionaryEntries: sanitized });
-    this.logger.log(`updateDictionaryEntries: stored ${sanitized.length} entries for ${userId}`);
-    return { dictionaryEntries: sanitized };
+    return this.userCollectionsManager.updateDictionaryEntries(userId, entries);
   }
 
   async getFavoriteGestures(userId: string) {
-    const { userDoc } = await this.getUserDocument(userId);
-    const data = userDoc.data() as any;
-    return {
-      favoriteGestures: this.normalizeStringArray(data?.favoriteGestures),
-    };
+    return this.userCollectionsManager.getFavoriteGestures(userId);
   }
 
   async updateFavoriteGestures(userId: string, entries: string[]) {
-    const sanitized = this.sanitizeStringArrayInput(entries, 'favoriteGestures');
-    const { userRef } = await this.getUserDocument(userId);
-    await userRef.update({ favoriteGestures: sanitized });
-    this.logger.log(
-      `updateFavoriteGestures: stored ${sanitized.length} favorite gestures for ${userId}`,
-    );
-    return { favoriteGestures: sanitized };
+    return this.userCollectionsManager.updateFavoriteGestures(userId, entries);
   }
 
   async getBadges(userId: string) {
-    const { userDoc } = await this.getUserDocument(userId);
-    const data = userDoc.data() as any;
-    return {
-      badges: this.normalizeBadgesMatrix(data?.badges),
-    };
+    return this.userCollectionsManager.getBadges(userId);
   }
 
   async updateBadges(userId: string, badges: number[][]) {
-    const sanitized = this.normalizeBadgesMatrix(badges, true);
-    const { userRef } = await this.getUserDocument(userId);
-    await userRef.update({ badges: sanitized });
-    return { badges: sanitized };
+    return this.userCollectionsManager.updateBadges(userId, badges);
   }
 
   async getAvatar(userId: string) {
-    const { userDoc } = await this.getUserDocument(userId);
-    const data = userDoc.data() as any;
-    const avatarPath = data?.avatarPath;
-    if (!avatarPath) {
-      return {
-        avatarUrl: null,
-        avatarMimeType: null,
-        avatarUpdatedAt: data?.avatarUpdatedAt ?? null,
-      };
-    }
-
-    const bucket = this.getStorageBucket();
-    const fileRef = bucket.file(avatarPath);
-    const expiresAt = Date.now() + this.avatarSignedUrlExpiresInMs;
-
-    try {
-      const [url] = await fileRef.getSignedUrl({
-        action: 'read',
-        expires: expiresAt,
-      });
-
-      return {
-        avatarUrl: url,
-        avatarMimeType: data?.avatarMimeType ?? null,
-        avatarUpdatedAt: data?.avatarUpdatedAt ?? null,
-        expiresAt,
-      };
-    } catch (err: any) {
-      this.logger.warn(
-        `getAvatar: failed to sign URL (${err?.message})` +
-          formatLogContext({
-            path: avatarPath,
-            userId: maskId(userId),
-          }),
-      );
-      return {
-        avatarUrl: null,
-        avatarMimeType: null,
-        avatarUpdatedAt: data?.avatarUpdatedAt ?? null,
-      };
-    }
+    return this.avatarManager.getAvatar(userId);
   }
 
   async downloadAvatar(userId: string) {
-    const { userDoc } = await this.getUserDocument(userId);
-    const data = userDoc.data() as any;
-    const avatarPath = data?.avatarPath;
-
-    if (!avatarPath) {
-      throw new BadRequestException('Kein Avatar vorhanden');
-    }
-
-    const bucket = this.getStorageBucket();
-    const fileRef = bucket.file(avatarPath);
-    const [exists] = await fileRef.exists();
-    if (!exists) {
-      throw new BadRequestException('Avatar wurde nicht gefunden');
-    }
-
-    return {
-      stream: fileRef.createReadStream(),
-      mimeType: data?.avatarMimeType ?? 'application/octet-stream',
-    };
+    return this.avatarManager.downloadAvatar(userId);
   }
 
   async uploadAvatar(userId: string, file?: AvatarUploadFile) {
-    const { buffer, mimeType } = await this.prepareAvatarFile(file);
-    await this.imageModerationService.assertImageIsSafe(buffer);
-    const { userDoc, userRef } = await this.getUserDocument(userId);
-    const previousPath = (userDoc.data() as any)?.avatarPath;
-    const extension = this.detectAvatarExtension(mimeType);
-    const newPath = `${this.avatarFolder}/${userId}/${uuidv4()}.${extension}`;
-    const bucket = this.getStorageBucket();
-    const fileRef = bucket.file(newPath);
-
-    await fileRef.save(buffer, {
-      resumable: false,
-      contentType: mimeType,
-      metadata: { cacheControl: 'private, max-age=0' },
-    });
-
-    if (previousPath) {
-      try {
-        await bucket.file(previousPath).delete({ ignoreNotFound: true });
-      } catch (err: any) {
-        this.logger.warn(
-          `uploadAvatar: failed to delete old avatar (${err?.message})` +
-            formatLogContext({
-              previousPath,
-              userId: maskId(userId),
-            }),
-        );
-      }
-    }
-
-    await userRef.update({
-      avatarPath: newPath,
-      avatarMimeType: mimeType,
-      avatarUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    this.logger.log(
-      'uploadAvatar: stored avatar' +
-        formatLogContext({
-          userId: maskId(userId),
-          path: newPath,
-          bytes: buffer.length,
-        }),
-    );
-
-    return {
-      avatarPath: newPath,
-      avatarMimeType: mimeType,
-    };
+    return this.avatarManager.uploadAvatar(userId, file);
   }
 
   async deleteAvatar(userId: string) {
-    const { userDoc, userRef } = await this.getUserDocument(userId);
-    const data = userDoc.data() as any;
-    const avatarPath = data?.avatarPath;
-
-    if (avatarPath) {
-      const bucket = this.getStorageBucket();
-      try {
-        await bucket.file(avatarPath).delete({ ignoreNotFound: true });
-      } catch (err: any) {
-        this.logger.warn(
-          `deleteAvatar: failed to delete avatar (${err?.message})` +
-            formatLogContext({
-              path: avatarPath,
-              userId: maskId(userId),
-            }),
-        );
-      }
-    }
-
-    await userRef.update({
-      avatarPath: admin.firestore.FieldValue.delete(),
-      avatarMimeType: admin.firestore.FieldValue.delete(),
-      avatarUpdatedAt: admin.firestore.FieldValue.delete(),
-    });
-
-    this.logger.log(
-      'deleteAvatar: removed avatar metadata' +
-        formatLogContext({
-          userId: maskId(userId),
-        }),
-    );
-    return { success: true };
-  }
-
-  private buildFriendshipKey(userIdA: string, userIdB: string): { a: string; b: string } {
-    if (userIdA === userIdB) {
-      throw new BadRequestException('Cannot be friends with yourself');
-    }
-    return userIdA < userIdB
-      ? { a: userIdA, b: userIdB }
-      : { a: userIdB, b: userIdA };
+    return this.avatarManager.deleteAvatar(userId);
   }
 
   async sendFriendRequest(fromUserId: string, targetUsername: string) {
-    const firestore = this.getFirestore();
-
-    const trimmedName = (targetUsername || '').trim();
-    if (!trimmedName) {
-      throw new BadRequestException('Ziel-Benutzername fehlt');
-    }
-
-    const userQuery = await firestore
-      .collection('users')
-      .where('name', '==', trimmedName)
-      .limit(1)
-      .get();
-
-    if (userQuery.empty) {
-      throw new BadRequestException('Benutzer nicht gefunden');
-    }
-
-    const targetDoc = userQuery.docs[0];
-    const toUserId = targetDoc.id;
-
-    if (toUserId === fromUserId) {
-      throw new BadRequestException('Du kannst dir selbst keine Anfrage senden');
-    }
-
-    const { a, b } = this.buildFriendshipKey(fromUserId, toUserId);
-
-    const friendshipSnapshot = await firestore
-      .collection(this.friendshipsCollection)
-      .where('userA', '==', a)
-      .where('userB', '==', b)
-      .limit(1)
-      .get();
-
-    if (!friendshipSnapshot.empty) {
-      throw new BadRequestException('Ihr seid bereits befreundet');
-    }
-
-    const existingRequestSnapshot = await firestore
-      .collection(this.friendRequestsCollection)
-      .where('fromUserId', '==', fromUserId)
-      .where('toUserId', '==', toUserId)
-      .where('status', '==', 'pending')
-      .limit(1)
-      .get();
-
-    if (!existingRequestSnapshot.empty) {
-      throw new BadRequestException('Es existiert bereits eine offene Anfrage');
-    }
-
-    const reverseRequestSnapshot = await firestore
-      .collection(this.friendRequestsCollection)
-      .where('fromUserId', '==', toUserId)
-      .where('toUserId', '==', fromUserId)
-      .where('status', '==', 'pending')
-      .limit(1)
-      .get();
-
-    if (!reverseRequestSnapshot.empty) {
-      const reqDoc = reverseRequestSnapshot.docs[0];
-      await firestore.runTransaction(async (tx) => {
-        tx.update(reqDoc.ref, {
-          status: 'accepted',
-          respondedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-
-        const friendshipRef = firestore.collection(this.friendshipsCollection).doc();
-        tx.set(friendshipRef, {
-          userA: a,
-          userB: b,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-      });
-
-      return {
-        success: true,
-        autoAccepted: true,
-        message: 'Gegenseitige Anfrage – Freundschaft wurde erstellt',
-      };
-    }
-
-    const requestRef = await firestore.collection(this.friendRequestsCollection).add({
-      fromUserId,
-      toUserId,
-      status: 'pending',
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    return {
-      success: true,
-      autoAccepted: false,
-      requestId: requestRef.id,
-      message: 'Freundschaftsanfrage gesendet',
-    };
+    return this.friendshipManager.sendFriendRequest(fromUserId, targetUsername);
   }
 
   async getIncomingFriendRequests(userId: string) {
-    const firestore = this.getFirestore();
-
-    const snapshot = await firestore
-      .collection(this.friendRequestsCollection)
-      .where('toUserId', '==', userId)
-      .where('status', '==', 'pending')
-      .get();
-
-    if (snapshot.empty) {
-      return { requests: [] };
-    }
-
-    const userIds = Array.from(
-      new Set(snapshot.docs.map((d) => (d.data() as any).fromUserId as string)),
-    );
-
-    const userDocs = await Promise.all(
-      userIds.map((id) => firestore.collection('users').doc(id).get()),
-    );
-
-    const userMap = new Map<string, any>();
-    userDocs.forEach((doc) => {
-      if (doc.exists) {
-        userMap.set(doc.id, doc.data());
-      }
-    });
-
-    const avatarResults = await Promise.all(
-      userIds.map(async (id) => {
-        try {
-          const avatar = await this.getAvatar(id);
-          return { id, avatarUrl: avatar.avatarUrl ?? null };
-        } catch {
-          return { id, avatarUrl: null };
-        }
-      }),
-    );
-
-    const avatarMap = new Map<string, string | null>();
-    avatarResults.forEach((item) => {
-      avatarMap.set(item.id, item.avatarUrl ?? null);
-    });
-
-    const requests = snapshot.docs.map((doc) => {
-      const data = doc.data() as any;
-      const fromData = userMap.get(data.fromUserId) || {};
-      return {
-        id: doc.id,
-        fromUserId: data.fromUserId,
-        username: fromData.name ?? null,
-        avatarUrl: avatarMap.get(data.fromUserId) ?? null,
-        loginStreak: fromData.loginStreak ?? 0,
-        createdAt: data.createdAt ?? null,
-      };
-    });
-
-    return { requests };
+    return this.friendshipManager.getIncomingFriendRequests(userId);
   }
 
   async respondToFriendRequest(userId: string, requestId: string, accept: boolean) {
-    const firestore = this.getFirestore();
-    const requestRef = firestore.collection(this.friendRequestsCollection).doc(requestId);
-    const requestDoc = await requestRef.get();
-
-    if (!requestDoc.exists) {
-      throw new BadRequestException('Anfrage nicht gefunden');
-    }
-
-    const data = requestDoc.data() as any;
-    if (data.toUserId !== userId) {
-      throw new UnauthorizedException('Du darfst diese Anfrage nicht bearbeiten');
-    }
-
-    if (data.status !== 'pending') {
-      throw new BadRequestException('Anfrage wurde bereits beantwortet');
-    }
-
-    if (!accept) {
-      await requestRef.update({
-        status: 'rejected',
-        respondedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-        return { success: true, accepted: false, message: 'Anfrage abgelehnt' };
-    }
-
-    const { a, b } = this.buildFriendshipKey(data.fromUserId, data.toUserId);
-
-    await firestore.runTransaction(async (tx) => {
-      tx.update(requestRef, {
-        status: 'accepted',
-        respondedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-
-      const friendshipRef = firestore.collection(this.friendshipsCollection).doc();
-      tx.set(friendshipRef, {
-        userA: a,
-        userB: b,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-    });
-
-    return { success: true, accepted: true, message: 'Freundschaftsanfrage akzeptiert' };
+    return this.friendshipManager.respondToFriendRequest(userId, requestId, accept);
   }
 
   async getFriends(userId: string) {
-    const firestore = this.getFirestore();
-
-    const friendshipsSnapshot = await firestore
-      .collection(this.friendshipsCollection)
-      .where('userA', '==', userId)
-      .get();
-
-    const friendshipsSnapshot2 = await firestore
-      .collection(this.friendshipsCollection)
-      .where('userB', '==', userId)
-      .get();
-
-    const friendIds = new Set<string>();
-
-    friendshipsSnapshot.docs.forEach((doc) => {
-      const data = doc.data() as any;
-      friendIds.add(data.userB as string);
-    });
-
-    friendshipsSnapshot2.docs.forEach((doc) => {
-      const data = doc.data() as any;
-      friendIds.add(data.userA as string);
-    });
-
-    const ids = Array.from(friendIds);
-    if (ids.length === 0) {
-      return { friends: [] };
-    }
-
-    const userDocs = await Promise.all(
-      ids.map((id) => firestore.collection('users').doc(id).get()),
-    );
-
-    const friends = await Promise.all(
-      userDocs
-        .filter((doc) => doc.exists)
-        .map(async (doc) => {
-          const data = doc.data() as any;
-          let avatarUrl: string | null = null;
-          try {
-            const avatar = await this.getAvatar(doc.id);
-            avatarUrl = avatar.avatarUrl ?? null;
-          } catch {
-            avatarUrl = null;
-          }
-
-          return {
-            userId: doc.id,
-            username: data.name ?? null,
-            avatarUrl,
-            loginStreak: data.loginStreak ?? 0,
-          };
-        }),
-    );
-
-    return { friends };
+    return this.friendshipManager.getFriends(userId);
   }
 
   async getProfileAbout(userId: string) {
-    const { userDoc } = await this.getUserDocument(userId);
-    const data = userDoc.data() as any;
-    return {
-      name: data?.name ?? '',
-      aboutMe: data?.aboutMe ?? '',
-    };
+    return this.userCollectionsManager.getProfileAbout(userId);
   }
 
   async signup(signupData: SignupDto) {
-    await this.cleanupExpiredEmailVerificationTokens();
-
-    const rawNameFromDto =
-      (signupData && (signupData as any).name) ||
-      (signupData && (signupData as any).username) ||
-      (signupData && (signupData as any).displayName) ||
-      '';
-    const name = (typeof rawNameFromDto === 'string' ? rawNameFromDto.trim() : '').trim();
-
-    const { email, password } = signupData as any;
-
-    this.logger.log(
-      'signup start' +
-        formatLogContext({
-          email: maskEmail(email),
-          hasPassword: hasValue(password),
-          nameLength: name.length,
-        }),
-    );
-
-    if (!email || typeof email !== 'string' || !email.trim()) {
-      this.logger.warn('signup: missing email');
-      throw new BadRequestException('Email ist erforderlich');
-    }
-    if (!password || typeof password !== 'string' || !password.trim()) {
-      this.logger.warn('signup: missing password');
-      throw new BadRequestException('Passwort ist erforderlich');
-    }
-    if (!name) {
-      this.logger.warn('signup: missing name');
-      throw new BadRequestException('Name ist erforderlich');
-    }
-
-    // Name gegen Schimpfwörter prüfen
-    this.validateNameAgainstForbiddenWords(name);
-
-    try {
-      const firestore = this.firebaseApp.firestore();
-      this.logger.log('signup: got firestore instance');
-
-      const emailRef = firestore.collection('users').where('email', '==', email);
-      const emailSnapshot = await emailRef.get();
-      this.logger.log(
-        'signup: checked email availability' +
-          formatLogContext({
-            email: maskEmail(email),
-            matches: emailSnapshot.size,
-          }),
-      );
-
-      if (!emailSnapshot.empty) {
-        this.logger.warn(
-          'signup: email already in use' + formatLogContext({ email: maskEmail(email) }),
-        );
-        throw new BadRequestException('Diese Email hat bereits einen Account');
-      }
-
-      const nameRef = firestore.collection('users').where('name', '==', name);
-      const nameSnapshot = await nameRef.get();
-      this.logger.log(
-        'signup: checked name availability' +
-          formatLogContext({
-            nameLength: name.length,
-            matches: nameSnapshot.size,
-          }),
-      );
-
-      if (!nameSnapshot.empty) {
-        this.logger.warn(
-          'signup: name already in use' +
-            formatLogContext({
-              nameLength: name.length,
-            }),
-        );
-        throw new BadRequestException('Dieser Benutzername ist bereits vergeben');
-      }
-
-      const hashedPassword = await bcrypt.hash(password, 10);
-      this.logger.log('signup: password hashed');
-
-      const oldTokensQuery = await firestore
-        .collection('emailVerifications')
-        .where('email', '==', email)
-        .get();
-
-      if (!oldTokensQuery.empty) {
-        this.logger.log(
-          'signup: deleting old verification tokens' +
-            formatLogContext({
-              email: maskEmail(email),
-              tokens: oldTokensQuery.size,
-            }),
-        );
-        const deletePromises = oldTokensQuery.docs.map((doc) => doc.ref.delete());
-        await Promise.all(deletePromises);
-      }
-
-      const token = uuidv4();
-      const createdAt = new Date();
-      const expiresAt = new Date(createdAt.getTime() + 15 * 60 * 1000);
-
-      this.logger.log(
-        'signup: creating verification token' +
-          formatLogContext({ token: maskToken(token, 'emailVerificationToken') }),
-      );
-      this.logger.log(`signup: token expires at ${expiresAt.toISOString()}`);
-      this.logger.log(`signup: server time: ${createdAt.toISOString()}`);
-
-      await firestore.collection('emailVerifications').doc(token).set({
-        email,
-        password: hashedPassword,
-        name,
-        createdAt: admin.firestore.Timestamp.fromDate(createdAt),
-        expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
-      });
-
-      this.logger.log('signup: email verification document created with token as document ID');
-
-      await this.mailerService.sendVerificationEmail(email, token, name);
-      this.logger.log('signup: verification email sent');
-
-      return {
-        success: true,
-        message:
-          'Verifizierungsmail gesendet. Bitte E-Mail innerhalb von 15 Minuten bestätigen.',
-      };
-    } catch (err) {
-      this.logger.error(`signup internal error: ${err?.message}`, err?.stack);
-      throw err;
-    }
+    return this.accountManager.signup(signupData);
   }
 
   async login(credentials: LoginDto) {
-
-    const { identifier, password } = credentials as any;
-
-    this.logger.log(
-      'login start' +
-        formatLogContext({
-          identifier: maskIdentifier(identifier),
-          hasPassword: hasValue(password),
-        }),
-    );
-
-    try {
-      const firestore = this.firebaseApp.firestore();
-      this.logger.log('login: got firestore instance');
-
-      const isEmail = typeof identifier === 'string' && identifier.includes('@');
-
-      const userQuery = isEmail
-        ? firestore.collection('users').where('email', '==', identifier)
-        : firestore.collection('users').where('name', '==', identifier);
-
-      const snapshot = await userQuery.get();
-      this.logger.log(
-        'login: query result' +
-          formatLogContext({
-            lookup: isEmail ? 'email' : 'name',
-            identifier: maskIdentifier(identifier),
-            matches: snapshot.size,
-          }),
-      );
-
-      if (snapshot.empty) {
-        this.logger.warn(
-          'login: no user found' +
-            formatLogContext({
-              lookup: isEmail ? 'email' : 'name',
-              identifier: maskIdentifier(identifier),
-            }),
-        );
-        throw new UnauthorizedException('Wrong credentials');
-      }
-
-      const userDoc = snapshot.docs[0];
-      await this.ensureUserCollections(userDoc);
-      const user = userDoc.data() as any;
-      this.logger.log(
-        'login: user document hydrated' +
-          formatLogContext({
-            userId: maskId(userDoc.id),
-          }),
-      );
-
-      const passwordMatch = await bcrypt.compare(password, user.password);
-      this.logger.log(`login: passwordMatch=${passwordMatch}`);
-
-      if (!passwordMatch) {
-        this.logger.warn(
-          'login: wrong password' +
-            formatLogContext({
-              lookup: isEmail ? 'email' : 'name',
-              identifier: maskIdentifier(identifier),
-            }),
-        );
-        throw new UnauthorizedException('Wrong credentials');
-      }
-
-      // Login-Streak aktualisieren
-      const now = new Date();
-      const streakData = this.updateLoginStreak(user, now);
-
-      await userDoc.ref.update({
-        ...streakData,
-      });
-
-      const tokens = await this.generateUserToken(userDoc.id);
-      this.logger.log('login: tokens generated');
-
-      return {
-        ...tokens,
-        loginStreak: streakData.loginStreak,
-        longestLoginStreak: streakData.longestLoginStreak,
-      };
-    } catch (err) {
-      this.logger.error(`login internal error: ${err?.message}`, err?.stack);
-      throw err;
-    }
+    return this.sessionManager.login(credentials);
   }
 
   async refreshTokens(refreshToken: string) {
-    this.logger.log(
-      'refreshTokens start' +
-        formatLogContext({
-          token: maskToken(refreshToken, 'refreshToken'),
-        }),
-    );
-
-    try {
-      const firestore = this.firebaseApp.firestore();
-      this.logger.log('refreshTokens: got firestore instance');
-
-      const tokenRef = firestore
-        .collection('refreshTokens')
-        .where('token', '==', refreshToken)
-        .where('expiryDate', '>=', new Date());
-
-      const snapshot = await tokenRef.get();
-      this.logger.log(
-        'refreshTokens: lookup result' +
-          formatLogContext({
-            tokens: snapshot.size,
-          }),
-      );
-
-      if (snapshot.empty) {
-        this.logger.warn('refreshTokens: token not found or expired');
-        throw new UnauthorizedException();
-      }
-
-      const tokenDoc = snapshot.docs[0];
-      const token = tokenDoc.data() as any;
-      this.logger.log(
-        'refreshTokens: token resolved' +
-          formatLogContext({
-            tokenId: maskId(tokenDoc.id),
-            userId: maskId(token.userId),
-          }),
-      );
-
-      const tokens = await this.generateUserToken(token.userId);
-      this.logger.log('refreshTokens: new tokens generated');
-      return tokens;
-    } catch (err) {
-      this.logger.error(`refreshTokens internal error: ${err?.message}`, err?.stack);
-      throw err;
-    }
+    return this.sessionManager.refreshTokens(refreshToken);
   }
 
   async generateUserToken(userId: string) {
-    this.logger.log(
-      'generateUserToken start' +
-        formatLogContext({
-          userId: maskId(userId),
-        }),
-    );
-
-    const accessToken = this.jwtService.sign({ userId }, { expiresIn: '1h' });
-    const refreshToken = uuidv4();
-    this.logger.log('generateUserToken: tokens created');
-
-    await this.storeRefreshToken(refreshToken, userId);
-    this.logger.log('generateUserToken: refresh token stored');
-
-    return {
-      accessToken,
-      refreshToken,
-    };
+    return this.sessionManager.generateUserToken(userId);
   }
 
   async storeRefreshToken(token: string, userId: string) {
-    this.logger.log(
-      'storeRefreshToken start' +
-        formatLogContext({
-          userId: maskId(userId),
-        }),
-    );
-
-    const expiryDate = new Date();
-    expiryDate.setDate(expiryDate.getDate() + 3);
-
-    const firestore = this.firebaseApp.firestore();
-    this.logger.log('storeRefreshToken: got firestore instance');
-
-    await firestore.collection('refreshTokens').add({
-      token,
-      userId,
-      expiryDate: admin.firestore.Timestamp.fromDate(expiryDate),
-    });
-    this.logger.log('storeRefreshToken: refresh token document created');
+    return this.sessionManager.storeRefreshToken(token, userId);
   }
 
   async verifyEmailToken(token: string): Promise<{
@@ -1653,520 +279,22 @@ export class AuthService {
     email?: string;
     name?: string;
   }> {
-    this.logger.log(
-      'verifyEmailToken start' +
-        formatLogContext({
-          token: maskToken(token, 'emailVerificationToken'),
-        }),
-    );
-
-    const firestore = this.firebaseApp.firestore();
-    await this.cleanupExpiredEmailVerificationTokens();
-
-    try {
-      const docRef = firestore.collection('emailVerifications').doc(token);
-      const doc = await docRef.get();
-
-      if (!doc.exists) {
-        this.logger.error(`verifyEmailToken: document not found for token`);
-        return {
-          success: false,
-          error: 'INVALID_TOKEN',
-          message: 'Ungültiger oder abgelaufener Token',
-          email: '',
-        };
-      }
-
-      const tokenData = doc.data() as any;
-      if (!tokenData) {
-        this.logger.warn(`verifyEmailToken: document has no data`);
-        return {
-          success: false,
-          error: 'INVALID_TOKEN_DATA',
-          message: 'Ungültige Token-Daten',
-          email: '',
-        };
-      }
-
-      const email: string = (tokenData.email && String(tokenData.email)) || '';
-      const password = tokenData.password;
-      const name: string = (tokenData.name && String(tokenData.name)) || '';
-
-      this.logger.log(
-        'verifyEmailToken: payload extracted' +
-          formatLogContext({
-            email: maskEmail(email),
-            hasPassword: hasValue(password),
-            nameLength: name.length,
-          }),
-      );
-
-      if (!email || !password) {
-        this.logger.warn(`verifyEmailToken: missing required fields`);
-        return {
-          success: false,
-          error: 'MISSING_FIELDS',
-          message: 'Fehlende Benutzerdaten',
-          email: email || '',
-        };
-      }
-
-      const userQuery = await firestore.collection('users').where('email', '==', email).get();
-
-      if (!userQuery.empty) {
-        this.logger.log(
-          'verifyEmailToken: user already exists' + formatLogContext({ email: maskEmail(email) }),
-        );
-        const existingUser = userQuery.docs[0];
-        try {
-          await docRef.delete();
-          this.logger.log(
-            'verifyEmailToken: deleted stale verification token' +
-              formatLogContext({
-                token: maskToken(token, 'emailVerificationToken'),
-                email: maskEmail(email),
-              }),
-          );
-        } catch (delErr) {
-          this.logger.warn(`verifyEmailToken: failed to delete token doc: ${delErr?.message}`);
-        }
-
-        return {
-          success: true,
-          message: 'Account existiert und ist verifiziert.',
-          userId: existingUser.id,
-          email,
-          name: existingUser.data()?.name || '',
-        };
-      }
-
-      this.logger.log(
-        'verifyEmailToken: creating user' + formatLogContext({ email: maskEmail(email) }),
-      );
-      const userRef = await firestore.collection('users').add({
-        email,
-        password,
-        name,
-        emailVerified: true,
-        createdAt: admin.firestore.Timestamp.fromDate(new Date()),
-        loginStreak: 0,
-        longestLoginStreak: 0,
-        lastLoginDate: null,
-        aboutMe: '',
-        lessonPerformanceMatrix: [],
-        testPerformanceMatrix: [],
-        dictionaryEntries: [],
-        favoriteGestures: [],
-        avatarPath: null,
-        avatarMimeType: null,
-        avatarUpdatedAt: null,
-      });
-
-      this.logger.log(
-        'verifyEmailToken: user created' +
-          formatLogContext({
-            userId: maskId(userRef.id),
-          }),
-      );
-
-      try {
-        await docRef.delete();
-        this.logger.log(
-          'verifyEmailToken: deleted verification token after user creation' +
-            formatLogContext({
-              token: maskToken(token, 'emailVerificationToken'),
-              userId: maskId(userRef.id),
-            }),
-        );
-      } catch (delErr) {
-        this.logger.warn(
-          `verifyEmailToken: failed to delete token doc after creating user: ${delErr?.message}`,
-        );
-      }
-
-      return {
-        success: true,
-        message: 'Email erfolgreich verifiziert',
-        userId: userRef.id,
-        email,
-        name,
-      };
-    } catch (err) {
-      this.logger.error(`verifyEmailToken ERROR: ${err?.message}`, err?.stack);
-      return {
-        success: false,
-        error: 'SERVER_ERROR',
-        message: 'Server Fehler',
-        email: '',
-      };
-    }
+    return this.accountManager.verifyEmailToken(token);
   }
 
   // Google-Login mit Login-Streak
   async loginWithGoogle(googleUser: { email: string; name: string; googleId: string }) {
-    this.logger.log(
-      'loginWithGoogle start' +
-        formatLogContext({
-          email: maskEmail(googleUser.email),
-          googleId: maskId(googleUser.googleId),
-        }),
-    );
-
-    if (!googleUser.email) {
-      this.logger.warn('loginWithGoogle: missing email from Google profile');
-      throw new BadRequestException('Google account has no email');
-    }
-
-    const firestore = this.firebaseApp.firestore();
-    this.logger.log('loginWithGoogle: got firestore instance');
-
-    const now = new Date();
-    let userId: string | null = null;
-    let loginStreak = 0;
-    let longestLoginStreak = 0;
-
-    // nach googleId
-    const googleIdQuery = await firestore
-      .collection('users')
-      .where('googleId', '==', googleUser.googleId)
-      .get();
-
-    if (!googleIdQuery.empty) {
-      const userDoc = googleIdQuery.docs[0];
-      const user = userDoc.data() as any;
-      userId = userDoc.id;
-        await this.ensureUserCollections(userDoc);
-
-      const streakData = this.updateLoginStreak(user, now);
-
-      await userDoc.ref.update({
-        ...streakData,
-      });
-
-      loginStreak = streakData.loginStreak;
-      longestLoginStreak = streakData.longestLoginStreak;
-
-      this.logger.log(
-        'loginWithGoogle: matched by googleId' +
-          formatLogContext({
-            googleId: maskId(googleUser.googleId),
-            userId: maskId(userId),
-          }),
-      );
-    } else {
-      // nach email
-      const emailQuery = await firestore
-        .collection('users')
-        .where('email', '==', googleUser.email)
-        .get();
-
-      if (!emailQuery.empty) {
-        const userDoc = emailQuery.docs[0];
-        const user = userDoc.data() as any;
-        userId = userDoc.id;
-        await this.ensureUserCollections(userDoc);
-
-        const streakData = this.updateLoginStreak(user, now);
-
-        await userDoc.ref.update({
-          googleId: googleUser.googleId,
-          ...streakData,
-        });
-
-        loginStreak = streakData.loginStreak;
-        longestLoginStreak = streakData.longestLoginStreak;
-
-        this.logger.log(
-          'loginWithGoogle: matched by email' +
-            formatLogContext({
-              email: maskEmail(googleUser.email),
-              userId: maskId(userId),
-            }),
-        );
-      } else {
-        // neuer User
-        const streakData = this.updateLoginStreak(
-          { lastLoginDate: null, loginStreak: 0, longestLoginStreak: 0 },
-          now,
-        );
-
-        this.logger.log(
-          'loginWithGoogle: creating new user' +
-            formatLogContext({
-              email: maskEmail(googleUser.email),
-            }),
-        );
-
-        const newUserRef = await firestore.collection('users').add({
-          email: googleUser.email,
-          name: googleUser.name || googleUser.email,
-          googleId: googleUser.googleId,
-          emailVerified: true,
-          password: null,
-          createdAt: admin.firestore.Timestamp.fromDate(now),
-          aboutMe: '',
-          lessonPerformanceMatrix: [],
-          testPerformanceMatrix: [],
-          dictionaryEntries: [],
-          favoriteGestures: [],
-          avatarPath: null,
-          avatarMimeType: null,
-          avatarUpdatedAt: null,
-          ...streakData,
-        });
-
-        userId = newUserRef.id;
-        loginStreak = streakData.loginStreak;
-        longestLoginStreak = streakData.longestLoginStreak;
-
-        this.logger.log(
-          'loginWithGoogle: new user created' +
-            formatLogContext({
-              userId: maskId(userId),
-            }),
-        );
-      }
-    }
-
-    if (!userId) {
-      this.logger.error('loginWithGoogle: failed to resolve userId');
-      throw new UnauthorizedException();
-    }
-
-    const tokens = await this.generateUserToken(userId);
-    this.logger.log('loginWithGoogle: tokens generated');
-    return {
-      ...tokens,
-      loginStreak,
-      longestLoginStreak,
-    };
+    return this.sessionManager.loginWithGoogle(googleUser);
   }
 
   // Apple-Login mit Login-Streak
   async loginWithApple(appleUser: { email: string; name: string; appleId: string }) {
-    this.logger.log(
-      'loginWithApple start' +
-        formatLogContext({
-          email: maskEmail(appleUser.email),
-          appleId: maskId(appleUser.appleId),
-        }),
-    );
-
-    /**
-     * Apple liefert email (und name) oft nur beim allerersten Login/Consent.
-     * Deshalb: Primär über appleId matchen; email nur für Merge/Create verwenden. [web:31]
-     */
-    if (!appleUser.appleId) {
-      this.logger.warn('loginWithApple: missing appleId from Apple profile');
-      throw new BadRequestException('Apple login has no appleId');
-    }
-
-    const firestore = this.firebaseApp.firestore();
-    this.logger.log('loginWithApple: got firestore instance');
-
-    const now = new Date();
-    let userId: string | null = null;
-    let loginStreak = 0;
-    let longestLoginStreak = 0;
-
-    // 1) Zuerst appleId (funktioniert auch ohne email) [web:31]
-    const appleIdQuery = await firestore
-      .collection('users')
-      .where('appleId', '==', appleUser.appleId)
-      .get();
-
-    if (!appleIdQuery.empty) {
-      const userDoc = appleIdQuery.docs[0];
-      const user = userDoc.data() as any;
-      userId = userDoc.id;
-      await this.ensureUserCollections(userDoc);
-
-      const streakData = this.updateLoginStreak(user, now);
-
-      await userDoc.ref.update({
-        ...streakData,
-      });
-
-      loginStreak = streakData.loginStreak;
-      longestLoginStreak = streakData.longestLoginStreak;
-
-      this.logger.log(
-        'loginWithApple: matched by appleId' +
-          formatLogContext({
-            appleId: maskId(appleUser.appleId),
-            userId: maskId(userId),
-          }),
-      );
-    } else {
-      // 2) Kein user via appleId → dann brauchen wir email für Merge/Create
-      if (!appleUser.email) {
-        this.logger.warn(
-          'loginWithApple: Apple did not provide email and no existing user found by appleId',
-        );
-        throw new BadRequestException(
-          'Apple did not provide email. Please re-authorize email scope and try again.',
-        );
-      }
-
-      const emailQuery = await firestore
-        .collection('users')
-        .where('email', '==', appleUser.email)
-        .get();
-
-      if (!emailQuery.empty) {
-        const userDoc = emailQuery.docs[0];
-        const user = userDoc.data() as any;
-        userId = userDoc.id;
-        await this.ensureUserCollections(userDoc);
-
-        const streakData = this.updateLoginStreak(user, now);
-
-        await userDoc.ref.update({
-          appleId: appleUser.appleId,
-          ...streakData,
-        });
-
-        loginStreak = streakData.loginStreak;
-        longestLoginStreak = streakData.longestLoginStreak;
-
-        this.logger.log(
-          'loginWithApple: matched by email' +
-            formatLogContext({
-              email: maskEmail(appleUser.email),
-              userId: maskId(userId),
-            }),
-        );
-      } else {
-        const streakData = this.updateLoginStreak(
-          { lastLoginDate: null, loginStreak: 0, longestLoginStreak: 0 },
-          now,
-        );
-
-        this.logger.log(
-          'loginWithApple: creating new user' +
-            formatLogContext({
-              email: maskEmail(appleUser.email),
-            }),
-        );
-
-        const newUserRef = await firestore.collection('users').add({
-          email: appleUser.email,
-          name: appleUser.name || appleUser.email,
-          appleId: appleUser.appleId,
-          emailVerified: true,
-          password: null,
-          createdAt: admin.firestore.Timestamp.fromDate(now),
-          aboutMe: '',
-          lessonPerformanceMatrix: [],
-          testPerformanceMatrix: [],
-          dictionaryEntries: [],
-          favoriteGestures: [],
-          avatarPath: null,
-          avatarMimeType: null,
-          avatarUpdatedAt: null,
-          ...streakData,
-        });
-
-        userId = newUserRef.id;
-        loginStreak = streakData.loginStreak;
-        longestLoginStreak = streakData.longestLoginStreak;
-
-        this.logger.log(
-          'loginWithApple: new user created' +
-            formatLogContext({
-              userId: maskId(userId),
-            }),
-        );
-      }
-    }
-
-    if (!userId) {
-      this.logger.error('loginWithApple: failed to resolve userId');
-      throw new UnauthorizedException();
-    }
-
-    const tokens = await this.generateUserToken(userId);
-    this.logger.log('loginWithApple: tokens generated');
-    return {
-      ...tokens,
-      loginStreak,
-      longestLoginStreak,
-    };
+    return this.sessionManager.loginWithApple(appleUser);
   }
 
   // Profil aktualisieren (Name + AboutMe)
   async updateProfile(userId: string, dto: UpdateProfileDto) {
-    this.logger.log(
-      'updateProfile start' +
-        formatLogContext({
-          userId: maskId(userId),
-          nameProvided: hasValue(dto?.name),
-          aboutMeLength:
-            typeof dto?.aboutMe === 'string' ? dto.aboutMe.trim().length : undefined,
-        }),
-    );
-
-    const firestore = this.firebaseApp.firestore();
-    const userRef = firestore.collection('users').doc(userId);
-    const userDoc = await userRef.get();
-
-    if (!userDoc.exists) {
-      this.logger.warn(
-        'updateProfile: user not found' +
-          formatLogContext({
-            userId: maskId(userId),
-          }),
-      );
-      throw new BadRequestException('User not found');
-    }
-
-    const updates: Record<string, any> = {};
-
-    if (dto.name && dto.name.trim()) {
-      const newName = dto.name.trim();
-
-      const nameRef = firestore.collection('users').where('name', '==', newName);
-      const nameSnapshot = await nameRef.get();
-
-      const conflict = nameSnapshot.docs.find((d) => d.id !== userId);
-      if (conflict) {
-        this.logger.warn(
-          'updateProfile: name already in use by other user' +
-            formatLogContext({
-              nameLength: newName.length,
-            }),
-        );
-        throw new BadRequestException('Dieser Benutzername ist bereits vergeben');
-      }
-
-      this.validateNameAgainstForbiddenWords(newName);
-
-      updates.name = newName;
-    }
-
-    if (typeof dto.aboutMe === 'string') {
-      updates.aboutMe = dto.aboutMe.trim();
-    }
-
-    if (Object.keys(updates).length === 0) {
-      this.logger.log('updateProfile: nothing to update');
-      return { success: true, message: 'Nothing to update' };
-    }
-
-    await userRef.update(updates);
-
-    this.logger.log(
-      'updateProfile: updated user' +
-        formatLogContext({
-          userId: maskId(userId),
-          updatedFields: Object.keys(updates),
-        }),
-    );
-    return {
-      success: true,
-      message: 'Profil aktualisiert',
-      updates,
-    };
+    return this.accountManager.updateProfile(userId, dto);
   }
 
   /**
@@ -2181,26 +309,6 @@ export class AuthService {
           userId: maskId(userId),
         }),
     );
-    const firestore = this.firebaseApp.firestore();
-    const userRef = firestore.collection('users').doc(userId);
-    const userDoc = await userRef.get();
-
-    if (!userDoc.exists) {
-      this.logger.warn(
-        'getStreak: user not found' +
-          formatLogContext({
-            userId: maskId(userId),
-          }),
-      );
-      throw new BadRequestException('User not found');
-    }
-
-    const user = userDoc.data() as any;
-    return {
-      success: true,
-      loginStreak: (user && (user.loginStreak as number)) || 0,
-      longestLoginStreak: (user && (user.longestLoginStreak as number)) || 0,
-      lastLoginDate: (user && user.lastLoginDate) || null,
-    };
+    return this.userCollectionsManager.getStreak(userId);
   }
 }

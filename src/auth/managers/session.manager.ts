@@ -1,0 +1,584 @@
+import { BadRequestException, Logger, UnauthorizedException } from '@nestjs/common';
+import * as admin from 'firebase-admin';
+import * as bcrypt from 'bcrypt';
+import { JwtService } from '@nestjs/jwt';
+import { v4 as uuidv4 } from 'uuid';
+import { LoginDto } from '../dto/login.dto';
+import {
+  formatLogContext,
+  hasValue,
+  maskEmail,
+  maskId,
+  maskIdentifier,
+  maskToken,
+} from '../../common/logging/redaction';
+import { UserCollectionsManager } from './user-collections.manager';
+
+export interface SessionManagerOptions {
+  firebaseApp: admin.app.App;
+  logger: Logger;
+  jwtService: JwtService;
+  userCollectionsManager: UserCollectionsManager;
+  refreshTokenCleanupBatchSize?: number;
+}
+
+export class SessionManager {
+  private readonly refreshTokenCleanupBatchSize: number;
+
+  constructor(private readonly options: SessionManagerOptions) {
+    this.refreshTokenCleanupBatchSize = Math.max(
+      1,
+      Number.isFinite(options.refreshTokenCleanupBatchSize)
+        ? Number(options.refreshTokenCleanupBatchSize)
+        : 500,
+    );
+  }
+
+  private get firestore() {
+    return this.options.firebaseApp.firestore();
+  }
+
+  private get jwtService() {
+    return this.options.jwtService;
+  }
+
+  private get logger() {
+    return this.options.logger;
+  }
+
+  private updateLoginStreak(
+    user: any,
+    now: Date,
+  ): { loginStreak: number; longestLoginStreak: number; lastLoginDate: string } {
+    const currentDate = now.toISOString().slice(0, 10);
+
+    const last = user.lastLoginDate as string | undefined;
+    let loginStreak = user.loginStreak as number | undefined;
+    let longestLoginStreak = user.longestLoginStreak as number | undefined;
+
+    if (!last) {
+      loginStreak = 1;
+    } else {
+      const lastDate = new Date(last);
+      const diffDays = Math.floor(
+        (Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) -
+          Date.UTC(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate())) /
+          (1000 * 60 * 60 * 24),
+      );
+
+      if (diffDays === 0) {
+        loginStreak = loginStreak || 1;
+      } else if (diffDays === 1) {
+        loginStreak = (loginStreak || 0) + 1;
+      } else {
+        loginStreak = 1;
+      }
+    }
+
+    longestLoginStreak = Math.max(longestLoginStreak || 0, loginStreak || 0);
+
+    return {
+      loginStreak,
+      longestLoginStreak,
+      lastLoginDate: currentDate,
+    };
+  }
+
+  async login(credentials: LoginDto) {
+    const { identifier, password } = credentials as any;
+
+    this.logger.log(
+      'login start' +
+        formatLogContext({
+          identifier: maskIdentifier(identifier),
+          hasPassword: hasValue(password),
+        }),
+    );
+
+    try {
+      const firestore = this.firestore;
+      this.logger.log('login: got firestore instance');
+
+      const isEmail = typeof identifier === 'string' && identifier.includes('@');
+
+      const userQuery = isEmail
+        ? firestore.collection('users').where('email', '==', identifier)
+        : firestore.collection('users').where('name', '==', identifier);
+
+      const snapshot = await userQuery.get();
+      this.logger.log(
+        'login: query result' +
+          formatLogContext({
+            lookup: isEmail ? 'email' : 'name',
+            identifier: maskIdentifier(identifier),
+            matches: snapshot.size,
+          }),
+      );
+
+      if (snapshot.empty) {
+        this.logger.warn(
+          'login: no user found' +
+            formatLogContext({
+              lookup: isEmail ? 'email' : 'name',
+              identifier: maskIdentifier(identifier),
+            }),
+        );
+        throw new UnauthorizedException('Wrong credentials');
+      }
+
+      const userDoc = snapshot.docs[0];
+      await this.options.userCollectionsManager.ensureUserCollections(userDoc);
+      const user = userDoc.data() as any;
+      this.logger.log(
+        'login: user document hydrated' +
+          formatLogContext({
+            userId: maskId(userDoc.id),
+          }),
+      );
+
+      const passwordMatch = await bcrypt.compare(password, user.password);
+      this.logger.log(`login: passwordMatch=${passwordMatch}`);
+
+      if (!passwordMatch) {
+        this.logger.warn(
+          'login: wrong password' +
+            formatLogContext({
+              lookup: isEmail ? 'email' : 'name',
+              identifier: maskIdentifier(identifier),
+            }),
+        );
+        throw new UnauthorizedException('Wrong credentials');
+      }
+
+      const now = new Date();
+      const streakData = this.updateLoginStreak(user, now);
+
+      await userDoc.ref.update({
+        ...streakData,
+      });
+
+      const tokens = await this.generateUserToken(userDoc.id);
+      this.logger.log('login: tokens generated');
+
+      return {
+        ...tokens,
+        loginStreak: streakData.loginStreak,
+        longestLoginStreak: streakData.longestLoginStreak,
+      };
+    } catch (err) {
+      this.logger.error(`login internal error: ${err?.message}`, err?.stack);
+      throw err;
+    }
+  }
+
+  async refreshTokens(refreshToken: string) {
+    this.logger.log(
+      'refreshTokens start' +
+        formatLogContext({
+          token: maskToken(refreshToken, 'refreshToken'),
+        }),
+    );
+
+    try {
+      await this.cleanupExpiredRefreshTokens();
+      const firestore = this.firestore;
+      this.logger.log('refreshTokens: got firestore instance');
+
+      const tokenRef = firestore
+        .collection('refreshTokens')
+        .where('token', '==', refreshToken)
+        .where('expiryDate', '>=', new Date());
+
+      const snapshot = await tokenRef.get();
+      this.logger.log(
+        'refreshTokens: lookup result' +
+          formatLogContext({
+            tokens: snapshot.size,
+          }),
+      );
+
+      if (snapshot.empty) {
+        this.logger.warn('refreshTokens: token not found or expired');
+        throw new UnauthorizedException();
+      }
+
+      const tokenDoc = snapshot.docs[0];
+      const token = tokenDoc.data() as any;
+      this.logger.log(
+        'refreshTokens: token resolved' +
+          formatLogContext({
+            tokenId: maskId(tokenDoc.id),
+            userId: maskId(token.userId),
+          }),
+      );
+
+      const tokens = await this.generateUserToken(token.userId);
+      this.logger.log('refreshTokens: new tokens generated');
+      return tokens;
+    } catch (err) {
+      this.logger.error(`refreshTokens internal error: ${err?.message}`, err?.stack);
+      throw err;
+    }
+  }
+
+  async generateUserToken(userId: string) {
+    this.logger.log(
+      'generateUserToken start' +
+        formatLogContext({
+          userId: maskId(userId),
+        }),
+    );
+
+    const accessToken = this.jwtService.sign({ userId }, { expiresIn: '1h' });
+    const refreshToken = uuidv4();
+    this.logger.log('generateUserToken: tokens created');
+
+    await this.storeRefreshToken(refreshToken, userId);
+    this.logger.log('generateUserToken: refresh token stored');
+
+    return {
+      accessToken,
+      refreshToken,
+    };
+  }
+
+  async storeRefreshToken(token: string, userId: string) {
+    this.logger.log(
+      'storeRefreshToken start' +
+        formatLogContext({
+          userId: maskId(userId),
+        }),
+    );
+
+    const expiryDate = new Date();
+    expiryDate.setDate(expiryDate.getDate() + 3);
+
+    const firestore = this.firestore;
+    this.logger.log('storeRefreshToken: got firestore instance');
+
+    await this.cleanupExpiredRefreshTokens();
+    await firestore.collection('refreshTokens').add({
+      token,
+      userId,
+      expiryDate: admin.firestore.Timestamp.fromDate(expiryDate),
+    });
+    this.logger.log('storeRefreshToken: refresh token document created');
+  }
+
+  private async cleanupExpiredRefreshTokens() {
+    const firestore = this.firestore;
+    const now = admin.firestore.Timestamp.fromDate(new Date());
+    let deletedTotal = 0;
+
+    while (true) {
+      const snapshot = await firestore
+        .collection('refreshTokens')
+        .where('expiryDate', '<=', now)
+        .limit(this.refreshTokenCleanupBatchSize)
+        .get();
+
+      if (snapshot.empty) {
+        break;
+      }
+
+      const batch = firestore.batch();
+      snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+      await batch.commit();
+      deletedTotal += snapshot.size;
+
+      if (snapshot.size < this.refreshTokenCleanupBatchSize) {
+        break;
+      }
+    }
+
+    if (deletedTotal > 0) {
+      this.logger.log(
+        'cleanupExpiredRefreshTokens: deleted expired refresh tokens' +
+          formatLogContext({
+            deleted: deletedTotal,
+          }),
+      );
+    }
+  }
+
+  async loginWithGoogle(googleUser: { email: string; name: string; googleId: string }) {
+    this.logger.log(
+      'loginWithGoogle start' +
+        formatLogContext({
+          email: maskEmail(googleUser.email),
+          googleId: maskId(googleUser.googleId),
+        }),
+    );
+
+    if (!googleUser.email) {
+      this.logger.warn('loginWithGoogle: missing email from Google profile');
+      throw new BadRequestException('Google account has no email');
+    }
+
+    const firestore = this.firestore;
+    this.logger.log('loginWithGoogle: got firestore instance');
+
+    const now = new Date();
+    let userId: string | null = null;
+    let loginStreak = 0;
+    let longestLoginStreak = 0;
+
+    const googleIdQuery = await firestore
+      .collection('users')
+      .where('googleId', '==', googleUser.googleId)
+      .get();
+
+    if (!googleIdQuery.empty) {
+      const userDoc = googleIdQuery.docs[0];
+      const user = userDoc.data() as any;
+      userId = userDoc.id;
+      await this.options.userCollectionsManager.ensureUserCollections(userDoc);
+
+      const streakData = this.updateLoginStreak(user, now);
+
+      await userDoc.ref.update({
+        ...streakData,
+      });
+
+      loginStreak = streakData.loginStreak;
+      longestLoginStreak = streakData.longestLoginStreak;
+
+      this.logger.log(
+        'loginWithGoogle: matched by googleId' +
+          formatLogContext({
+            googleId: maskId(googleUser.googleId),
+            userId: maskId(userId),
+          }),
+      );
+    } else {
+      const emailQuery = await firestore
+        .collection('users')
+        .where('email', '==', googleUser.email)
+        .get();
+
+      if (!emailQuery.empty) {
+        const userDoc = emailQuery.docs[0];
+        const user = userDoc.data() as any;
+        userId = userDoc.id;
+        await this.options.userCollectionsManager.ensureUserCollections(userDoc);
+
+        const streakData = this.updateLoginStreak(user, now);
+
+        await userDoc.ref.update({
+          googleId: googleUser.googleId,
+          ...streakData,
+        });
+
+        loginStreak = streakData.loginStreak;
+        longestLoginStreak = streakData.longestLoginStreak;
+
+        this.logger.log(
+          'loginWithGoogle: matched by email' +
+            formatLogContext({
+              email: maskEmail(googleUser.email),
+              userId: maskId(userId),
+            }),
+        );
+      } else {
+        const streakData = this.updateLoginStreak(
+          { lastLoginDate: null, loginStreak: 0, longestLoginStreak: 0 },
+          now,
+        );
+
+        this.logger.log(
+          'loginWithGoogle: creating new user' +
+            formatLogContext({
+              email: maskEmail(googleUser.email),
+            }),
+        );
+
+        const newUserRef = await firestore.collection('users').add({
+          email: googleUser.email,
+          name: googleUser.name || googleUser.email,
+          googleId: googleUser.googleId,
+          emailVerified: true,
+          password: null,
+          createdAt: admin.firestore.Timestamp.fromDate(now),
+          aboutMe: '',
+          lessonPerformanceMatrix: [],
+          testPerformanceMatrix: [],
+          dictionaryEntries: [],
+          favoriteGestures: [],
+          avatarPath: null,
+          avatarMimeType: null,
+          avatarUpdatedAt: null,
+          ...streakData,
+        });
+
+        userId = newUserRef.id;
+        loginStreak = streakData.loginStreak;
+        longestLoginStreak = streakData.longestLoginStreak;
+
+        this.logger.log(
+          'loginWithGoogle: new user created' +
+            formatLogContext({
+              userId: maskId(userId),
+            }),
+        );
+      }
+    }
+
+    if (!userId) {
+      this.logger.error('loginWithGoogle: failed to resolve userId');
+      throw new UnauthorizedException();
+    }
+
+    const tokens = await this.generateUserToken(userId);
+    this.logger.log('loginWithGoogle: tokens generated');
+    return {
+      ...tokens,
+      loginStreak,
+      longestLoginStreak,
+    };
+  }
+
+  async loginWithApple(appleUser: { email: string; name: string; appleId: string }) {
+    this.logger.log(
+      'loginWithApple start' +
+        formatLogContext({
+          email: maskEmail(appleUser.email),
+          appleId: maskId(appleUser.appleId),
+        }),
+    );
+
+    if (!appleUser.appleId) {
+      this.logger.warn('loginWithApple: missing appleId from Apple profile');
+      throw new BadRequestException('Apple login has no appleId');
+    }
+
+    const firestore = this.firestore;
+    this.logger.log('loginWithApple: got firestore instance');
+
+    const now = new Date();
+    let userId: string | null = null;
+    let loginStreak = 0;
+    let longestLoginStreak = 0;
+
+    const appleIdQuery = await firestore
+      .collection('users')
+      .where('appleId', '==', appleUser.appleId)
+      .get();
+
+    if (!appleIdQuery.empty) {
+      const userDoc = appleIdQuery.docs[0];
+      const user = userDoc.data() as any;
+      userId = userDoc.id;
+      await this.options.userCollectionsManager.ensureUserCollections(userDoc);
+
+      const streakData = this.updateLoginStreak(user, now);
+
+      await userDoc.ref.update({
+        ...streakData,
+      });
+
+      loginStreak = streakData.loginStreak;
+      longestLoginStreak = streakData.longestLoginStreak;
+
+      this.logger.log(
+        'loginWithApple: matched by appleId' +
+          formatLogContext({
+            appleId: maskId(appleUser.appleId),
+            userId: maskId(userId),
+          }),
+      );
+    } else {
+      if (!appleUser.email) {
+        this.logger.warn(
+          'loginWithApple: Apple did not provide email and no existing user found by appleId',
+        );
+        throw new BadRequestException(
+          'Apple did not provide email. Please re-authorize email scope and try again.',
+        );
+      }
+
+      const emailQuery = await firestore
+        .collection('users')
+        .where('email', '==', appleUser.email)
+        .get();
+
+      if (!emailQuery.empty) {
+        const userDoc = emailQuery.docs[0];
+        const user = userDoc.data() as any;
+        userId = userDoc.id;
+        await this.options.userCollectionsManager.ensureUserCollections(userDoc);
+
+        const streakData = this.updateLoginStreak(user, now);
+
+        await userDoc.ref.update({
+          appleId: appleUser.appleId,
+          ...streakData,
+        });
+
+        loginStreak = streakData.loginStreak;
+        longestLoginStreak = streakData.longestLoginStreak;
+
+        this.logger.log(
+          'loginWithApple: matched by email' +
+            formatLogContext({
+              email: maskEmail(appleUser.email),
+              userId: maskId(userId),
+            }),
+        );
+      } else {
+        const streakData = this.updateLoginStreak(
+          { lastLoginDate: null, loginStreak: 0, longestLoginStreak: 0 },
+          now,
+        );
+
+        this.logger.log(
+          'loginWithApple: creating new user' +
+            formatLogContext({
+              email: maskEmail(appleUser.email),
+            }),
+        );
+
+        const newUserRef = await firestore.collection('users').add({
+          email: appleUser.email,
+          name: appleUser.name || appleUser.email,
+          appleId: appleUser.appleId,
+          emailVerified: true,
+          password: null,
+          createdAt: admin.firestore.Timestamp.fromDate(now),
+          aboutMe: '',
+          lessonPerformanceMatrix: [],
+          testPerformanceMatrix: [],
+          dictionaryEntries: [],
+          favoriteGestures: [],
+          avatarPath: null,
+          avatarMimeType: null,
+          avatarUpdatedAt: null,
+          ...streakData,
+        });
+
+        userId = newUserRef.id;
+        loginStreak = streakData.loginStreak;
+        longestLoginStreak = streakData.longestLoginStreak;
+
+        this.logger.log(
+          'loginWithApple: new user created' +
+            formatLogContext({
+              userId: maskId(userId),
+            }),
+        );
+      }
+    }
+
+    if (!userId) {
+      this.logger.error('loginWithApple: failed to resolve userId');
+      throw new UnauthorizedException();
+    }
+
+    const tokens = await this.generateUserToken(userId);
+    this.logger.log('loginWithApple: tokens generated');
+    return {
+      ...tokens,
+      loginStreak,
+      longestLoginStreak,
+    };
+  }
+}
