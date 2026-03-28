@@ -309,6 +309,20 @@ export class AuthService {
           userId: maskId(userId),
         }),
     );
+
+    try {
+      await this.sessionManager.ensureLoginStreakIsCurrent(userId);
+    } catch (err: any) {
+      this.logger.error(
+        'getStreak: failed to ensure login streak is current' +
+          formatLogContext({
+            userId: maskId(userId),
+            error: err?.message,
+          }),
+        err?.stack,
+      );
+    }
+
     return this.userCollectionsManager.getStreak(userId);
   }
 }

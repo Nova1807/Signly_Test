@@ -135,9 +135,9 @@ export class SessionManager {
     };
   }
 
-  private async updateLoginStreakForUserId(
+  async ensureLoginStreakIsCurrent(
     userId: string,
-    now: Date,
+    now: Date = new Date(),
   ): Promise<{ loginStreak: number; longestLoginStreak: number; lastLoginDate: string } | null> {
     const firestore = this.firestore;
     const userRef = firestore.collection('users').doc(userId);
@@ -306,7 +306,7 @@ export class SessionManager {
       );
 
       try {
-        await this.updateLoginStreakForUserId(token.userId, new Date());
+        await this.ensureLoginStreakIsCurrent(token.userId, new Date());
       } catch (err: any) {
         this.logger.error(
           'refreshTokens: failed to update login streak during refresh' +
