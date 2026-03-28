@@ -24,6 +24,7 @@ export interface SessionManagerOptions {
 
 export class SessionManager {
   private readonly refreshTokenCleanupBatchSize: number;
+  private readonly loginStreakDateFormatter: Intl.DateTimeFormat;
 
   constructor(private readonly options: SessionManagerOptions) {
     this.refreshTokenCleanupBatchSize = Math.max(
@@ -32,6 +33,12 @@ export class SessionManager {
         ? Number(options.refreshTokenCleanupBatchSize)
         : 500,
     );
+
+    const configuredTimeZone =
+      process.env.LOGIN_STREAK_TIMEZONE || process.env.TZ || 'Europe/Vienna';
+
+    const { formatter } = this.createLoginStreakFormatter(configuredTimeZone);
+    this.loginStreakDateFormatter = formatter;
   }
 
   private get firestore() {
@@ -46,24 +53,68 @@ export class SessionManager {
     return this.options.logger;
   }
 
+  private createLoginStreakFormatter(
+    configuredTimeZone: string,
+  ): { formatter: Intl.DateTimeFormat } {
+    const fallbackTimeZone = 'UTC';
+    try {
+      const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: configuredTimeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      });
+      // Format once to ensure the timezone is valid up front.
+      formatter.format(new Date());
+      this.logger.log(
+        'login streak timezone configured' + formatLogContext({ timeZone: configuredTimeZone }),
+      );
+      return { formatter };
+    } catch (err: any) {
+      this.logger.warn(
+        'login streak timezone invalid, falling back to UTC' +
+          formatLogContext({
+            configuredTimeZone,
+            fallback: fallbackTimeZone,
+            error: err?.message,
+          }),
+      );
+      return {
+        formatter: new Intl.DateTimeFormat('en-CA', {
+          timeZone: fallbackTimeZone,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }),
+      };
+    }
+  }
+
+  private formatDateForLoginStreak(date: Date): string {
+    return this.loginStreakDateFormatter.format(date);
+  }
+
+  private parseStoredLoginDate(dateString: string): Date {
+    return new Date(`${dateString}T00:00:00Z`);
+  }
+
   private updateLoginStreak(
     user: any,
     now: Date,
   ): { loginStreak: number; longestLoginStreak: number; lastLoginDate: string } {
-    const currentDate = now.toISOString().slice(0, 10);
+    const currentDate = this.formatDateForLoginStreak(now);
+    const currentDateValue = this.parseStoredLoginDate(currentDate);
 
     const last = user.lastLoginDate as string | undefined;
+    const lastDate = last ? this.parseStoredLoginDate(last) : undefined;
     let loginStreak = user.loginStreak as number | undefined;
     let longestLoginStreak = user.longestLoginStreak as number | undefined;
 
-    if (!last) {
+    if (!lastDate) {
       loginStreak = 1;
     } else {
-      const lastDate = new Date(last);
       const diffDays = Math.floor(
-        (Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) -
-          Date.UTC(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate())) /
-          (1000 * 60 * 60 * 24),
+        (currentDateValue.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24),
       );
 
       if (diffDays === 0) {

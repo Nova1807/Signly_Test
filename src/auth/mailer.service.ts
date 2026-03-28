@@ -367,7 +367,6 @@ export class MailerService {
                 Passwort zurücksetzen
               </a>
               <p style="margin:10px 0 0; font-size:12px; color:#64748b;">
-                Falls der Button nicht funktioniert, kopiere diesen Link in deinen Browser:<br />
                 <a href="${resetUrl}" style="color:#1e6fb8; word-break:break-all;">${resetUrl}</a>
               </p>
             </td>
@@ -381,7 +380,7 @@ export class MailerService {
                 <tr>
                   <td style="padding:12px 12px; text-align:center;">
                     <p style="margin:0; font-size:12px; line-height:1.6; color:#64748b;">
-                      Wenn du dein Passwort nicht zurücksetzen wolltest, kannst du diese E-Mail ignorieren.
+                      Wenn du dein Passwort nicht zurücksetzen willst, kannst du diese E-Mail ignorieren.
                     </p>
                   </td>
                 </tr>
