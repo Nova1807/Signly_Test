@@ -135,6 +135,48 @@ export class SessionManager {
     };
   }
 
+  private async updateLoginStreakForUserId(
+    userId: string,
+    now: Date,
+  ): Promise<{ loginStreak: number; longestLoginStreak: number; lastLoginDate: string } | null> {
+    const firestore = this.firestore;
+    const userRef = firestore.collection('users').doc(userId);
+    const userDoc = await userRef.get();
+
+    if (!userDoc.exists) {
+      this.logger.warn(
+        'updateLoginStreakForUserId: user document missing' +
+          formatLogContext({
+            userId: maskId(userId),
+          }),
+      );
+      return null;
+    }
+
+    await this.options.userCollectionsManager.ensureUserCollections(userDoc);
+    const user = userDoc.data() as any;
+    const streakData = this.updateLoginStreak(user, now);
+
+    const hasChanges =
+      user?.lastLoginDate !== streakData.lastLoginDate ||
+      (user?.loginStreak ?? 0) !== (streakData.loginStreak ?? 0) ||
+      (user?.longestLoginStreak ?? 0) !== (streakData.longestLoginStreak ?? 0);
+
+    if (hasChanges) {
+      await userRef.update({ ...streakData });
+      this.logger.log(
+        'updateLoginStreakForUserId: streak updated' +
+          formatLogContext({
+            userId: maskId(userId),
+            loginStreak: streakData.loginStreak,
+            longestLoginStreak: streakData.longestLoginStreak,
+          }),
+      );
+    }
+
+    return streakData;
+  }
+
   async login(credentials: LoginDto) {
     const { identifier, password } = credentials as any;
 
@@ -262,6 +304,19 @@ export class SessionManager {
             userId: maskId(token.userId),
           }),
       );
+
+      try {
+        await this.updateLoginStreakForUserId(token.userId, new Date());
+      } catch (err: any) {
+        this.logger.error(
+          'refreshTokens: failed to update login streak during refresh' +
+            formatLogContext({
+              userId: maskId(token.userId),
+              error: err?.message,
+            }),
+          err?.stack,
+        );
+      }
 
       const tokens = await this.generateUserToken(token.userId);
       this.logger.log('refreshTokens: new tokens generated');
