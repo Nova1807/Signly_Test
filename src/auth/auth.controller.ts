@@ -251,12 +251,37 @@ export class AuthController {
     return res.redirect(appRedirectUrl);
   }
 
-  // Apple OAuth Start
+  // Apple OAuth Start (native app payload via GET link)
   @Get('apple')
-  async appleAuth(@Res() res: Response) {
-    this.logger.log('appleAuth endpoint called – redirecting to Apple');
-    const authorizeUrl = this.appleSignInService.getAuthorizationUrl();
-    return res.redirect(authorizeUrl);
+  async appleAuth(@Query() query: AppleAppLoginDto, @Res() res: Response) {
+    try {
+      this.logger.log(
+        'appleAuth(GET) called with native payload' +
+          formatLogContext({
+            hasUser: hasValue(query.user),
+            hasEmail: hasValue(query.email),
+          }),
+      );
+
+      const tokens = await this.handleAppleAppFlow(query, 'web-get');
+      const appRedirectUrl = this.buildAppleDeepLink(tokens);
+
+      this.logger.log(
+        'appleAuth(GET) redirecting to mobile deep link' +
+          formatLogContext({
+            hasAccessToken: hasValue(tokens?.accessToken),
+            hasRefreshToken: hasValue(tokens?.refreshToken),
+          }),
+      );
+      return res.redirect(appRedirectUrl);
+    } catch (err: any) {
+      this.logger.error(`appleAuth(GET) ERROR: ${err?.message}`, err?.stack);
+
+      const msg = err instanceof BadRequestException ? 'bad_request' : 'server_error';
+      return res.redirect(
+        `signly://auth/error?provider=apple&message=${encodeURIComponent(msg)}`,
+      );
+    }
   }
 
   /**
@@ -266,110 +291,59 @@ export class AuthController {
   async appleAuthFromApp(@Body() dto: AppleAppLoginDto) {
     try {
       this.logger.log(
-        `appleAuthFromApp called (mobile flow), hasUser=${dto.user ? 'y' : 'n'}, hasEmail=${
-          dto.email ? 'y' : 'n'
-        }`,
+        'appleAuthFromApp called (mobile flow)' +
+          formatLogContext({
+            hasUser: hasValue(dto.user),
+            hasEmail: hasValue(dto.email),
+          }),
       );
 
-      const appleUser = await this.appleSignInService.buildProfileFromAppPayload({
-        identityToken: dto.identityToken,
-        user: dto.user,
-        email: dto.email,
-        fullName: dto.fullName,
-        firstName: dto.firstName,
-        lastName: dto.lastName,
-      });
-      return this.authService.loginWithApple(appleUser);
+      return this.handleAppleAppFlow(dto, 'native-post');
     } catch (err: any) {
       this.logger.error(`appleAuthFromApp ERROR: ${err?.message}`, err?.stack);
       throw err;
     }
   }
 
-  /**
-   * Apple OAuth Redirect (POST)
-   * Apple sendet bei "web flow" häufig POST (form-urlencoded) an callbackURL. [page:1]
-   */
-  @Post('apple/redirect')
-  async appleAuthRedirect(@Req() req: Request, @Res() res: Response) {
-    try {
-      this.logger.log(
-        `appleAuthRedirect(POST) called, bodyKeys=${Object.keys(req.body || {}).join(',')}`,
-      );
-
-      const payload = this.appleSignInService.extractCallbackPayload(req);
-      const appleUser = await this.appleSignInService.buildProfileFromPayload(payload);
-
-      const { accessToken, refreshToken, loginStreak, longestLoginStreak } =
-        await this.authService.loginWithApple(appleUser);
-
-      const appRedirectUrl =
-        `signly://auth/apple` +
-        `?accessToken=${encodeURIComponent(accessToken)}` +
-        `&refreshToken=${encodeURIComponent(refreshToken)}` +
-        `&loginStreak=${encodeURIComponent(String(loginStreak ?? 0))}` +
-        `&longestLoginStreak=${encodeURIComponent(String(longestLoginStreak ?? 0))}`;
-
-      this.logger.log(
-        'appleAuthRedirect redirecting to mobile deep link' +
-          formatLogContext({
-            hasAccessToken: hasValue(accessToken),
-            hasRefreshToken: hasValue(refreshToken),
-          }),
-      );
-      return res.redirect(appRedirectUrl);
-    } catch (err: any) {
-      // Damit du endlich siehst was es ist (und nicht nur "Internal server error")
-      this.logger.error(`appleAuthRedirect ERROR: ${err?.message}`, err?.stack);
-
-      // Wenn du die Message in die App reichen willst:
-      const msg =
-        err instanceof BadRequestException
-          ? 'bad_request'
-          : 'server_error';
-
-      return res.redirect(`signly://auth/error?provider=apple&message=${encodeURIComponent(msg)}`);
-    }
+  private buildAppleDeepLink(tokens: {
+    accessToken: string;
+    refreshToken: string;
+    loginStreak?: number;
+    longestLoginStreak?: number;
+  }): string {
+    return (
+      `signly://auth/apple` +
+      `?accessToken=${encodeURIComponent(tokens.accessToken)}` +
+      `&refreshToken=${encodeURIComponent(tokens.refreshToken)}` +
+      `&loginStreak=${encodeURIComponent(String(tokens.loginStreak ?? 0))}` +
+      `&longestLoginStreak=${encodeURIComponent(String(tokens.longestLoginStreak ?? 0))}`
+    );
   }
 
-  /**
-   * Optionaler GET-Fallback (z.B. wenn irgendwo GET statt POST kommt)
-   * Wichtig: NICHT die POST-Methode aufrufen, sondern getrennt laufen lassen.
-   */
-  @Get('apple/redirect')
-  async appleAuthRedirectGet(@Req() req: Request, @Res() res: Response) {
-    // gleiche Logik wie POST (kopiert, bewusst kein gegenseitiges aufrufen)
-    try {
-      this.logger.log(
-        `appleAuthRedirect(GET) called, queryKeys=${Object.keys(req.query || {}).join(',')}`,
-      );
+  private async handleAppleAppFlow(
+    dto: AppleAppLoginDto,
+    source: 'web-get' | 'native-post',
+  ) {
+    const appleUser = await this.appleSignInService.buildProfileFromAppPayload({
+      identityToken: dto.identityToken,
+      user: dto.user,
+      email: dto.email,
+      fullName: dto.fullName,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+    });
 
-      const payload = this.appleSignInService.extractCallbackPayload(req);
-      const appleUser = await this.appleSignInService.buildProfileFromPayload(payload);
+    this.logger.log(
+      `handleAppleAppFlow resolved appleUser (${source})` +
+        formatLogContext({
+          email: maskEmail(appleUser.email),
+          appleId: maskId(appleUser.appleId),
+        }),
+    );
 
-      const { accessToken, refreshToken, loginStreak, longestLoginStreak } =
-        await this.authService.loginWithApple(appleUser);
-
-      const appRedirectUrl =
-        `signly://auth/apple` +
-        `?accessToken=${encodeURIComponent(accessToken)}` +
-        `&refreshToken=${encodeURIComponent(refreshToken)}` +
-        `&loginStreak=${encodeURIComponent(String(loginStreak ?? 0))}` +
-        `&longestLoginStreak=${encodeURIComponent(String(longestLoginStreak ?? 0))}`;
-
-      this.logger.log(
-        'appleAuthRedirectGet redirecting to mobile deep link' +
-          formatLogContext({
-            hasAccessToken: hasValue(accessToken),
-            hasRefreshToken: hasValue(refreshToken),
-          }),
-      );
-      return res.redirect(appRedirectUrl);
-    } catch (err: any) {
-      this.logger.error(`appleAuthRedirectGet ERROR: ${err?.message}`, err?.stack);
-      return res.redirect(`signly://auth/error?provider=apple&message=${encodeURIComponent('server_error')}`);
-    }
+    return this.authService.loginWithApple(appleUser);
   }
+
 
   // Profil-Update: alles im Body (accessToken + name + aboutMe)
   @Post('profile')

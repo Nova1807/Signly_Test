@@ -4,9 +4,8 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
-import { Request } from 'express';
 import * as https from 'node:https';
-import { createPublicKey, randomBytes } from 'node:crypto';
+import { createPublicKey } from 'node:crypto';
 import jwt, { JwtPayload } from 'jsonwebtoken';
 import { formatLogContext, maskEmail, maskId } from '../../common/logging/redaction';
 
@@ -23,12 +22,6 @@ type AppleKeysResponse = {
   keys: ApplePublicKey[];
 };
 
-type AppleCallbackPayload = {
-  idToken?: string;
-  state?: string;
-  user?: string | Record<string, any>;
-};
-
 type AppleAppPayload = {
   identityToken?: string;
   user?: string | Record<string, any>;
@@ -42,12 +35,6 @@ type AppleProfile = {
   appleId: string;
   email: string;
   name: string;
-};
-
-type AppleStatePayload = {
-  nonce: string;
-  iat: number;
-  exp: number;
 };
 
 type AppleUserField = {
@@ -69,57 +56,12 @@ type AppleIdTokenPayload = JwtPayload & {
 export class AppleSignInService {
   private readonly logger = new Logger(AppleSignInService.name);
   private static readonly APPLE_KEYS_URL = 'https://appleid.apple.com/auth/keys';
-  private static readonly APPLE_AUTH_URL = 'https://appleid.apple.com/auth/authorize';
   private appleKeysCache:
     | {
         keys: ApplePublicKey[];
         fetchedAt: number;
       }
     | null = null;
-
-  getAuthorizationUrl(): string {
-    const state = this.generateStateToken();
-    const params = new URLSearchParams({
-      response_type: 'code id_token',
-      response_mode: 'form_post',
-      scope: 'name email',
-      client_id: this.getClientId(),
-      redirect_uri: this.getCallbackUrl(),
-      state,
-    });
-
-    const url = `${AppleSignInService.APPLE_AUTH_URL}?${params.toString()}`;
-    this.logger.log(`Apple authorization URL generated with state token`);
-    return url;
-  }
-
-  extractCallbackPayload(req: Request): AppleCallbackPayload {
-    const body = req.body ?? {};
-    const query = req.query ?? {};
-
-    const idToken =
-      (body as any)?.id_token ||
-      (body as any)?.idToken ||
-      (query as any)?.id_token ||
-      (query as any)?.idToken;
-    const state = (body as any)?.state || (query as any)?.state;
-    const user = (body as any)?.user || (query as any)?.user;
-
-    return {
-      idToken: typeof idToken === 'string' ? idToken : undefined,
-      state: typeof state === 'string' ? state : undefined,
-      user: user,
-    };
-  }
-
-  async buildProfileFromPayload(payload: AppleCallbackPayload): Promise<AppleProfile> {
-    const stateData = this.verifyStateToken(payload.state);
-    return this.buildProfileFromIdToken({
-      idToken: payload.idToken,
-      user: payload.user,
-      logSuffix: `stateNonce=${stateData.nonce}`,
-    });
-  }
 
   async buildProfileFromAppPayload(payload: AppleAppPayload): Promise<AppleProfile> {
     const fallbackName = this.buildNameFromParts(payload);
@@ -140,39 +82,7 @@ export class AppleSignInService {
     return value;
   }
 
-  private getCallbackUrl(): string {
-    return (
-      process.env.APPLE_CALLBACK_URL ?? 'https://backend.signly.at/auth/apple/redirect'
-    );
-  }
-
-  private getStateSecret(): string {
-    return process.env.APPLE_STATE_SECRET || process.env.JWT_SECRET || 'apple-state-dev';
-  }
-
-  private generateStateToken(): string {
-    const payload = {
-      nonce: randomBytes(16).toString('hex'),
-    };
-
-    return jwt.sign(payload, this.getStateSecret(), { expiresIn: '10m' });
-  }
-
-  private verifyStateToken(state: string | undefined): AppleStatePayload {
-    if (!state) {
-      this.logger.warn('Apple callback missing state parameter');
-      throw new UnauthorizedException('Missing Apple state parameter');
-    }
-
-    try {
-      return jwt.verify(state, this.getStateSecret()) as AppleStatePayload;
-    } catch (err: any) {
-      this.logger.warn(`Invalid Apple state token: ${err?.message}`);
-      throw new UnauthorizedException('Invalid Apple state parameter');
-    }
-  }
-
-  private parseUserField(userField: AppleCallbackPayload['user']): {
+  private parseUserField(userField: AppleAppPayload['user']): {
     email: string;
     name: string;
   } {
@@ -229,7 +139,7 @@ export class AppleSignInService {
 
   private async buildProfileFromIdToken(options: {
     idToken?: string;
-    user?: AppleCallbackPayload['user'];
+    user?: AppleAppPayload['user'];
     fallbackEmail?: string;
     fallbackName?: string;
     logSuffix?: string;
