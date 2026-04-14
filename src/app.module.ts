@@ -7,6 +7,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import config from './config/config';
 import { FirebaseModule } from './firebase/firebase.module';
 import { PasswordResetModule } from './password-reset/password-reset.module';
+import { LegalModule } from './legal/legal.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { PasswordResetModule } from './password-reset/password-reset.module';
   FirebaseModule,
   AuthModule,
   PasswordResetModule,
+  LegalModule,
   ],
   controllers: [AppController],
   providers: [AppService],

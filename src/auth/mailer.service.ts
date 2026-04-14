@@ -49,7 +49,6 @@ export class MailerService {
         }),
     );
 
-    // Use image links 1:1 as requested
     const logoUrl =
       'https://storage.googleapis.com/signlydaten/schlange/Signly_logo_color_flatt2.png';
     const appIconUrl =
