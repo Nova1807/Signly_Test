@@ -15,6 +15,17 @@ import {
   UseInterceptors,
   UploadedFile,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOkResponse,
+  ApiOperation,
+  ApiProduces,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
@@ -41,6 +52,28 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import type { AvatarUploadFile } from './auth.service';
+import { AvatarUploadDto } from './dto/avatar-upload.dto';
+import {
+  AvatarResponseDto,
+  AvatarUploadResponseDto,
+  BadgesResponseDto,
+  DictionaryResponseDto,
+  FavoriteGesturesResponseDto,
+  FriendListResponseDto,
+  FriendRequestsResponseDto,
+  LessonPerformanceResponseDto,
+  LoginResponseDto,
+  ProfileAboutResponseDto,
+  ProfileUpdateResponseDto,
+  RespondFriendRequestResponseDto,
+  SendFriendRequestResponseDto,
+  SignupResponseDto,
+  StreakResponseDto,
+  SuccessResponseDto,
+  TestPerformanceResponseDto,
+  TokenPairDto,
+} from './dto/auth-responses.dto';
+import { RespondFriendRequestDto, SendFriendRequestDto } from './dto/friend-requests.dto';
 import {
   formatLogContext,
   hasValue,
@@ -52,6 +85,7 @@ import {
 
 const AVATAR_UPLOAD_MAX_BYTES = Number(process.env.AVATAR_MAX_BYTES ?? 5 * 1024 * 1024);
 
+@ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
@@ -64,6 +98,10 @@ export class AuthController {
   ) {}
 
   @Post('signup')
+  @ApiOperation({ summary: 'Neuen Account registrieren' })
+  @ApiBody({ type: SignupDto })
+  @ApiOkResponse({ description: 'Verifizierungsmail gesendet', type: SignupResponseDto })
+  @ApiResponse({ status: 400, description: 'Ungueltige Eingaben' })
   async signUp(@Body() signupData: SignupDto) {
     this.logger.log(
       'signup called' +
@@ -80,13 +118,17 @@ export class AuthController {
       const result = await this.authService.signup(signupData);
       this.logger.log('signup finished successfully');
       return result;
-    } catch (err) {
+    } catch (err: any) {
       this.logger.error(`signup error: ${err?.message}`, err?.stack);
       throw err;
     }
   }
 
   @Post('login')
+  @ApiOperation({ summary: 'Login mit E-Mail oder Benutzername' })
+  @ApiBody({ type: LoginDto })
+  @ApiOkResponse({ description: 'Login erfolgreich', type: LoginResponseDto })
+  @ApiResponse({ status: 401, description: 'Falsche Zugangsdaten' })
   async login(@Body() credentials: LoginDto) {
     this.logger.log(
       'login called' +
@@ -101,13 +143,17 @@ export class AuthController {
         `login finished successfully (streak=${result.loginStreak}, longest=${result.longestLoginStreak})`,
       );
       return result;
-    } catch (err) {
+    } catch (err: any) {
       this.logger.error(`login error: ${err?.message}`, err?.stack);
       throw err;
     }
   }
 
   @Post('refresh')
+  @ApiOperation({ summary: 'Access- und Refresh-Token erneuern' })
+  @ApiBody({ type: RefreshTokenDto })
+  @ApiOkResponse({ description: 'Neue Tokens', type: TokenPairDto })
+  @ApiResponse({ status: 401, description: 'Ungueltiger Refresh-Token' })
   async refreshtoken(@Body() refreshtokenDto: RefreshTokenDto) {
     this.logger.log(
       'refresh called' +
@@ -119,13 +165,19 @@ export class AuthController {
       const result = await this.authService.refreshTokens(refreshtokenDto.refreshToken);
       this.logger.log('refresh finished successfully');
       return result;
-    } catch (err) {
+    } catch (err: any) {
       this.logger.error(`refresh error: ${err?.message}`, err?.stack);
       throw err;
     }
   }
 
   @Get('verify')
+  @ApiOperation({ summary: 'E-Mail-Verifizierung (HTML)' })
+  @ApiQuery({ name: 'token', required: true, description: 'Verifizierungs-Token' })
+  @ApiQuery({ name: 'name', required: false, description: 'Optionaler Anzeigename' })
+  @ApiProduces('text/html')
+  @ApiResponse({ status: 200, description: 'HTML page', type: String })
+  @ApiResponse({ status: 400, description: 'Token ungueltig oder abgelaufen' })
   async verify(
     @Query('token') token: string,
     @Query('name') nameQuery: string | undefined,
@@ -203,7 +255,7 @@ export class AuthController {
           }),
       );
       return res.send(renderSuccessPageHtml(userName));
-    } catch (err) {
+    } catch (err: any) {
       this.logger.error(`verify ERROR: ${err?.message}`, err?.stack);
       return res.status(400).send(renderExpiredPageHtml());
     }
@@ -212,6 +264,8 @@ export class AuthController {
   // Google OAuth Start
   @Get('google')
   @UseGuards(GoogleAuthGuard)
+  @ApiOperation({ summary: 'Google OAuth Start' })
+  @ApiResponse({ status: 302, description: 'Redirect to Google OAuth' })
   async googleAuth() {
     this.logger.log('googleAuth endpoint called');
     return;
@@ -220,6 +274,8 @@ export class AuthController {
   // Google OAuth Redirect → Deep-Link in die App
   @Get('google/redirect')
   @UseGuards(GoogleAuthGuard)
+  @ApiOperation({ summary: 'Google OAuth Callback (Deep Link)' })
+  @ApiResponse({ status: 302, description: 'Redirect to app deep link' })
   async googleAuthRedirect(@Req() req: Request, @Res() res: Response) {
     const googleUser = req.user as { email: string; name: string; googleId: string };
     this.logger.log(
@@ -253,6 +309,15 @@ export class AuthController {
 
   // Apple OAuth Start (native app payload via GET link)
   @Get('apple')
+  @ApiOperation({ summary: 'Apple OAuth Start (GET)' })
+  @ApiQuery({ name: 'identityToken', required: true })
+  @ApiQuery({ name: 'authorizationCode', required: false })
+  @ApiQuery({ name: 'user', required: false })
+  @ApiQuery({ name: 'email', required: false })
+  @ApiQuery({ name: 'fullName', required: false })
+  @ApiQuery({ name: 'firstName', required: false })
+  @ApiQuery({ name: 'lastName', required: false })
+  @ApiResponse({ status: 302, description: 'Redirect to app deep link' })
   async appleAuth(@Query() query: AppleAppLoginDto, @Res() res: Response) {
     try {
       this.logger.log(
@@ -288,6 +353,10 @@ export class AuthController {
    * Native iOS app hands over the raw identityToken instead of going through the web redirect flow.
    */
   @Post('apple/app')
+  @ApiOperation({ summary: 'Apple Login (App Payload)' })
+  @ApiBody({ type: AppleAppLoginDto })
+  @ApiOkResponse({ description: 'Login erfolgreich', type: LoginResponseDto })
+  @ApiResponse({ status: 400, description: 'Ungueltige Apple Daten' })
   async appleAuthFromApp(@Body() dto: AppleAppLoginDto) {
     try {
       this.logger.log(
@@ -347,6 +416,12 @@ export class AuthController {
 
   // Profil-Update: alles im Body (accessToken + name + aboutMe)
   @Post('profile')
+  @ApiOperation({ summary: 'Profil aktualisieren' })
+  @ApiBearerAuth()
+  @ApiBody({ type: UpdateProfileDto })
+  @ApiOkResponse({ description: 'Profil aktualisiert', type: ProfileUpdateResponseDto })
+  @ApiResponse({ status: 400, description: 'Ungueltige Eingaben' })
+  @ApiResponse({ status: 401, description: 'Access token fehlt oder ungueltig' })
   async updateProfile(@Body() dto: UpdateProfileDto) {
     const accessToken = dto.accessToken;
 
@@ -388,6 +463,15 @@ export class AuthController {
   }
 
   @Get('profile/about')
+  @ApiOperation({ summary: 'Profil-Text abrufen' })
+  @ApiBearerAuth()
+  @ApiQuery({
+    name: 'accessToken',
+    required: false,
+    description: 'Access token (alternativ zum Authorization Header)',
+  })
+  @ApiOkResponse({ description: 'Profilinformationen', type: ProfileAboutResponseDto })
+  @ApiResponse({ status: 401, description: 'Access token fehlt oder ungueltig' })
   async getProfileAbout(
     @Query('accessToken') accessTokenQuery: string | undefined,
     @Req() req: Request,
@@ -400,6 +484,15 @@ export class AuthController {
 
   // GET current login streaks for the authenticated user
   @Get('streak')
+  @ApiOperation({ summary: 'Login-Streak abrufen' })
+  @ApiBearerAuth()
+  @ApiQuery({
+    name: 'accessToken',
+    required: false,
+    description: 'Access token (alternativ zum Authorization Header)',
+  })
+  @ApiOkResponse({ description: 'Streak-Daten', type: StreakResponseDto })
+  @ApiResponse({ status: 401, description: 'Access token fehlt oder ungueltig' })
   async getStreak(
     @Query('accessToken') accessTokenQuery: string | undefined,
     @Req() req: Request,
@@ -434,6 +527,15 @@ export class AuthController {
   }
 
   @Get('lessons/performance')
+  @ApiOperation({ summary: 'Lektions-Performance abrufen' })
+  @ApiBearerAuth()
+  @ApiQuery({
+    name: 'accessToken',
+    required: false,
+    description: 'Access token (alternativ zum Authorization Header)',
+  })
+  @ApiOkResponse({ description: 'Performance-Matrix', type: LessonPerformanceResponseDto })
+  @ApiResponse({ status: 401, description: 'Access token fehlt oder ungueltig' })
   async getLessonPerformance(
     @Query('accessToken') accessTokenQuery: string | undefined,
     @Req() req: Request,
@@ -445,6 +547,12 @@ export class AuthController {
   }
 
   @Post('lessons/performance')
+  @ApiOperation({ summary: 'Lektions-Performance aktualisieren' })
+  @ApiBearerAuth()
+  @ApiBody({ type: UpdateLessonPerformanceDto })
+  @ApiOkResponse({ description: 'Aktualisierte Matrix', type: LessonPerformanceResponseDto })
+  @ApiResponse({ status: 400, description: 'Ungueltige Eingaben' })
+  @ApiResponse({ status: 401, description: 'Access token fehlt oder ungueltig' })
   async updateLessonPerformance(
     @Body() dto: UpdateLessonPerformanceDto,
     @Req() req: Request,
@@ -458,6 +566,12 @@ export class AuthController {
   }
 
   @Post('lessons/performance/bulk')
+  @ApiOperation({ summary: 'Lektions-Performance Matrix ersetzen' })
+  @ApiBearerAuth()
+  @ApiBody({ type: UpdateLessonPerformanceMatrixDto })
+  @ApiOkResponse({ description: 'Aktualisierte Matrix', type: LessonPerformanceResponseDto })
+  @ApiResponse({ status: 400, description: 'Ungueltige Eingaben' })
+  @ApiResponse({ status: 401, description: 'Access token fehlt oder ungueltig' })
   async setLessonPerformanceMatrix(
     @Body() dto: UpdateLessonPerformanceMatrixDto,
     @Req() req: Request,
@@ -471,6 +585,15 @@ export class AuthController {
   }
 
   @Get('tests/performance')
+  @ApiOperation({ summary: 'Test-Performance abrufen' })
+  @ApiBearerAuth()
+  @ApiQuery({
+    name: 'accessToken',
+    required: false,
+    description: 'Access token (alternativ zum Authorization Header)',
+  })
+  @ApiOkResponse({ description: 'Performance-Matrix', type: TestPerformanceResponseDto })
+  @ApiResponse({ status: 401, description: 'Access token fehlt oder ungueltig' })
   async getTestPerformance(
     @Query('accessToken') accessTokenQuery: string | undefined,
     @Req() req: Request,
@@ -482,6 +605,12 @@ export class AuthController {
   }
 
   @Post('tests/performance')
+  @ApiOperation({ summary: 'Test-Performance aktualisieren' })
+  @ApiBearerAuth()
+  @ApiBody({ type: UpdateTestPerformanceDto })
+  @ApiOkResponse({ description: 'Aktualisierte Matrix', type: TestPerformanceResponseDto })
+  @ApiResponse({ status: 400, description: 'Ungueltige Eingaben' })
+  @ApiResponse({ status: 401, description: 'Access token fehlt oder ungueltig' })
   async updateTestPerformance(
     @Body() dto: UpdateTestPerformanceDto,
     @Req() req: Request,
@@ -495,6 +624,12 @@ export class AuthController {
   }
 
   @Post('tests/performance/bulk')
+  @ApiOperation({ summary: 'Test-Performance Matrix ersetzen' })
+  @ApiBearerAuth()
+  @ApiBody({ type: UpdateTestPerformanceMatrixDto })
+  @ApiOkResponse({ description: 'Aktualisierte Matrix', type: TestPerformanceResponseDto })
+  @ApiResponse({ status: 400, description: 'Ungueltige Eingaben' })
+  @ApiResponse({ status: 401, description: 'Access token fehlt oder ungueltig' })
   async setTestPerformanceMatrix(
     @Body() dto: UpdateTestPerformanceMatrixDto,
     @Req() req: Request,
@@ -506,6 +641,15 @@ export class AuthController {
   }
 
   @Get('dictionary')
+  @ApiOperation({ summary: 'Woerterbuch abrufen' })
+  @ApiBearerAuth()
+  @ApiQuery({
+    name: 'accessToken',
+    required: false,
+    description: 'Access token (alternativ zum Authorization Header)',
+  })
+  @ApiOkResponse({ description: 'Woerterbuch', type: DictionaryResponseDto })
+  @ApiResponse({ status: 401, description: 'Access token fehlt oder ungueltig' })
   async getDictionary(
     @Query('accessToken') accessTokenQuery: string | undefined,
     @Req() req: Request,
@@ -517,6 +661,12 @@ export class AuthController {
   }
 
   @Post('dictionary')
+  @ApiOperation({ summary: 'Woerterbuch aktualisieren' })
+  @ApiBearerAuth()
+  @ApiBody({ type: UpdateDictionaryDto })
+  @ApiOkResponse({ description: 'Aktualisierte Eintraege', type: DictionaryResponseDto })
+  @ApiResponse({ status: 400, description: 'Ungueltige Eingaben' })
+  @ApiResponse({ status: 401, description: 'Access token fehlt oder ungueltig' })
   async updateDictionary(@Body() dto: UpdateDictionaryDto, @Req() req: Request) {
     this.logger.log(
       `updateDictionary called with ${dto.dictionaryEntries?.length ?? 0} entries`,
@@ -527,6 +677,15 @@ export class AuthController {
   }
 
   @Get('favorite-gestures')
+  @ApiOperation({ summary: 'Favorisierte Gebaerden abrufen' })
+  @ApiBearerAuth()
+  @ApiQuery({
+    name: 'accessToken',
+    required: false,
+    description: 'Access token (alternativ zum Authorization Header)',
+  })
+  @ApiOkResponse({ description: 'Favorisierte Gebaerden', type: FavoriteGesturesResponseDto })
+  @ApiResponse({ status: 401, description: 'Access token fehlt oder ungueltig' })
   async getFavoriteGestures(
     @Query('accessToken') accessTokenQuery: string | undefined,
     @Req() req: Request,
@@ -538,6 +697,12 @@ export class AuthController {
   }
 
   @Post('favorite-gestures')
+  @ApiOperation({ summary: 'Favorisierte Gebaerden aktualisieren' })
+  @ApiBearerAuth()
+  @ApiBody({ type: UpdateFavoriteGesturesDto })
+  @ApiOkResponse({ description: 'Aktualisierte Liste', type: FavoriteGesturesResponseDto })
+  @ApiResponse({ status: 400, description: 'Ungueltige Eingaben' })
+  @ApiResponse({ status: 401, description: 'Access token fehlt oder ungueltig' })
   async updateFavoriteGestures(
     @Body() dto: UpdateFavoriteGesturesDto,
     @Req() req: Request,
@@ -551,6 +716,15 @@ export class AuthController {
   }
 
   @Get('badges')
+  @ApiOperation({ summary: 'Badges abrufen' })
+  @ApiBearerAuth()
+  @ApiQuery({
+    name: 'accessToken',
+    required: false,
+    description: 'Access token (alternativ zum Authorization Header)',
+  })
+  @ApiOkResponse({ description: 'Badges Matrix', type: BadgesResponseDto })
+  @ApiResponse({ status: 401, description: 'Access token fehlt oder ungueltig' })
   async getBadges(
     @Query('accessToken') accessTokenQuery: string | undefined,
     @Req() req: Request,
@@ -561,6 +735,12 @@ export class AuthController {
   }
 
   @Post('badges')
+  @ApiOperation({ summary: 'Badges aktualisieren' })
+  @ApiBearerAuth()
+  @ApiBody({ type: UpdateBadgesDto })
+  @ApiOkResponse({ description: 'Aktualisierte Badges', type: BadgesResponseDto })
+  @ApiResponse({ status: 400, description: 'Ungueltige Eingaben' })
+  @ApiResponse({ status: 401, description: 'Access token fehlt oder ungueltig' })
   async updateBadges(
     @Body() dto: UpdateBadgesDto,
     @Req() req: Request,
@@ -571,6 +751,15 @@ export class AuthController {
   }
 
   @Get('profile/avatar')
+  @ApiOperation({ summary: 'Avatar-Metadaten abrufen' })
+  @ApiBearerAuth()
+  @ApiQuery({
+    name: 'accessToken',
+    required: false,
+    description: 'Access token (alternativ zum Authorization Header)',
+  })
+  @ApiOkResponse({ description: 'Avatar-Infos', type: AvatarResponseDto })
+  @ApiResponse({ status: 401, description: 'Access token fehlt oder ungueltig' })
   async getAvatar(
     @Query('accessToken') accessTokenQuery: string | undefined,
     @Req() req: Request,
@@ -588,6 +777,13 @@ export class AuthController {
       limits: { fileSize: AVATAR_UPLOAD_MAX_BYTES },
     }),
   )
+  @ApiOperation({ summary: 'Avatar hochladen' })
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ type: AvatarUploadDto })
+  @ApiOkResponse({ description: 'Avatar gespeichert', type: AvatarUploadResponseDto })
+  @ApiResponse({ status: 400, description: 'Ungueltiges Bild oder Payload' })
+  @ApiResponse({ status: 401, description: 'Access token fehlt oder ungueltig' })
   async uploadAvatar(
     @UploadedFile() file: AvatarUploadFile,
     @Req() req: Request,
@@ -599,6 +795,15 @@ export class AuthController {
   }
 
   @Delete('profile/avatar')
+  @ApiOperation({ summary: 'Avatar loeschen' })
+  @ApiBearerAuth()
+  @ApiQuery({
+    name: 'accessToken',
+    required: false,
+    description: 'Access token (alternativ zum Authorization Header)',
+  })
+  @ApiOkResponse({ description: 'Avatar entfernt', type: SuccessResponseDto })
+  @ApiResponse({ status: 401, description: 'Access token fehlt oder ungueltig' })
   async deleteAvatar(
     @Query('accessToken') accessTokenQuery: string | undefined,
     @Req() req: Request,
@@ -610,6 +815,21 @@ export class AuthController {
   }
 
   @Get('profile/avatar/raw')
+  @ApiOperation({ summary: 'Avatar als Datei abrufen' })
+  @ApiBearerAuth()
+  @ApiQuery({
+    name: 'accessToken',
+    required: false,
+    description: 'Access token (alternativ zum Authorization Header)',
+  })
+  @ApiProduces('application/octet-stream')
+  @ApiResponse({
+    status: 200,
+    description: 'Avatar-Datei',
+    schema: { type: 'string', format: 'binary' },
+  })
+  @ApiResponse({ status: 400, description: 'Kein Avatar vorhanden' })
+  @ApiResponse({ status: 401, description: 'Access token fehlt oder ungueltig' })
   async getAvatarRaw(
     @Query('accessToken') accessTokenQuery: string | undefined,
     @Req() req: Request,
@@ -624,18 +844,41 @@ export class AuthController {
   }
 
   @Post('friends/request')
+  @ApiOperation({ summary: 'Freundschaftsanfrage senden' })
+  @ApiBearerAuth()
+  @ApiBody({ type: SendFriendRequestDto })
+  @ApiQuery({
+    name: 'accessToken',
+    required: false,
+    description: 'Access token (alternativ zum Authorization Header)',
+  })
+  @ApiOkResponse({
+    description: 'Anfrage erstellt',
+    type: SendFriendRequestResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Ungueltige Anfrage' })
+  @ApiResponse({ status: 401, description: 'Access token fehlt oder ungueltig' })
   async sendFriendRequest(
-    @Body('targetUsername') targetUsername: string,
+    @Body() dto: SendFriendRequestDto,
     @Query('accessToken') accessTokenQuery: string | undefined,
     @Req() req: Request,
   ) {
     this.logger.log('sendFriendRequest called');
     const accessToken = this.resolveAccessToken(req, accessTokenQuery);
     const userId = this.resolveUserIdFromToken(accessToken);
-    return this.authService.sendFriendRequest(userId, targetUsername);
+    return this.authService.sendFriendRequest(userId, dto.targetUsername);
   }
 
   @Get('friends/requests')
+  @ApiOperation({ summary: 'Eingehende Freundschaftsanfragen' })
+  @ApiBearerAuth()
+  @ApiQuery({
+    name: 'accessToken',
+    required: false,
+    description: 'Access token (alternativ zum Authorization Header)',
+  })
+  @ApiOkResponse({ description: 'Liste der Anfragen', type: FriendRequestsResponseDto })
+  @ApiResponse({ status: 401, description: 'Access token fehlt oder ungueltig' })
   async getIncomingFriendRequests(
     @Query('accessToken') accessTokenQuery: string | undefined,
     @Req() req: Request,
@@ -647,19 +890,41 @@ export class AuthController {
   }
 
   @Post('friends/requests/respond')
+  @ApiOperation({ summary: 'Freundschaftsanfrage beantworten' })
+  @ApiBearerAuth()
+  @ApiBody({ type: RespondFriendRequestDto })
+  @ApiQuery({
+    name: 'accessToken',
+    required: false,
+    description: 'Access token (alternativ zum Authorization Header)',
+  })
+  @ApiOkResponse({
+    description: 'Antwort gespeichert',
+    type: RespondFriendRequestResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Ungueltige Anfrage' })
+  @ApiResponse({ status: 401, description: 'Access token fehlt oder ungueltig' })
   async respondToFriendRequest(
-    @Body('requestId') requestId: string,
-    @Body('accept') accept: boolean,
+    @Body() dto: RespondFriendRequestDto,
     @Query('accessToken') accessTokenQuery: string | undefined,
     @Req() req: Request,
   ) {
     this.logger.log('respondToFriendRequest called');
     const accessToken = this.resolveAccessToken(req, accessTokenQuery);
     const userId = this.resolveUserIdFromToken(accessToken);
-    return this.authService.respondToFriendRequest(userId, requestId, accept);
+    return this.authService.respondToFriendRequest(userId, dto.requestId, dto.accept);
   }
 
   @Get('friends')
+  @ApiOperation({ summary: 'Freunde abrufen' })
+  @ApiBearerAuth()
+  @ApiQuery({
+    name: 'accessToken',
+    required: false,
+    description: 'Access token (alternativ zum Authorization Header)',
+  })
+  @ApiOkResponse({ description: 'Liste der Freunde', type: FriendListResponseDto })
+  @ApiResponse({ status: 401, description: 'Access token fehlt oder ungueltig' })
   async getFriends(
     @Query('accessToken') accessTokenQuery: string | undefined,
     @Req() req: Request,

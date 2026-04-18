@@ -32,11 +32,12 @@ async function bootstrap() {
     .setTitle('Signly API')
     .setDescription('API documentation for Signly backend')
     .setVersion('1.0')
+    .addBearerAuth()
     .build();
 
-  const documentFactory = () => SwaggerModule.createDocument(app, config);
+  const document = SwaggerModule.createDocument(app, config);
 
-  SwaggerModule.setup('api', app, documentFactory, {
+  SwaggerModule.setup('api', app, document, {
     jsonDocumentUrl: 'api-json',
   });
 

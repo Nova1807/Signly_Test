@@ -1,5 +1,7 @@
 import { Controller, Get, Header } from '@nestjs/common';
+import { ApiOkResponse, ApiOperation, ApiProduces, ApiTags } from '@nestjs/swagger';
 
+@ApiTags('legal')
 @Controller('legal')
 export class LegalController {
   private readonly supportEmail = 'support@signly.at';
@@ -239,6 +241,9 @@ export class LegalController {
 
   @Get('privacy')
   @Header('Content-Type', 'text/html; charset=utf-8')
+  @ApiOperation({ summary: 'Datenschutzerklaerung als HTML' })
+  @ApiProduces('text/html')
+  @ApiOkResponse({ description: 'HTML page', type: String })
   getPrivacy(): string {
     return this.pageShell({
       title: 'Datenschutzerklärung',
@@ -340,6 +345,9 @@ export class LegalController {
 
   @Get('terms')
   @Header('Content-Type', 'text/html; charset=utf-8')
+  @ApiOperation({ summary: 'Nutzungsbedingungen als HTML' })
+  @ApiProduces('text/html')
+  @ApiOkResponse({ description: 'HTML page', type: String })
   getTerms(): string {
     return this.pageShell({
       title: 'Nutzungsbedingungen',
