@@ -5,7 +5,8 @@ import { ApiOkResponse, ApiOperation, ApiProduces, ApiTags } from '@nestjs/swagg
 @Controller('legal')
 export class LegalController {
   private readonly supportEmail = 'support@signly.at';
-  private readonly logoUrl = 'https://backend.signly.at/email-assets/Logo.png';
+  private readonly logoUrl =
+    'https://storage.googleapis.com/signlydaten/schlange/Signly_logo_color_flatt2.png';
 
   private pageShell(params: {
     title: string;

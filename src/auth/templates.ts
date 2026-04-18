@@ -4,9 +4,10 @@ export function renderSuccessPageHtml(name: string) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
-  const baseUrl = 'https://backend.signly.at';
-  const assetsBaseUrl = `${baseUrl}/email-assets`;
-  const appIconUrl = `${assetsBaseUrl}/signly_App_Icon.png`;
+  const appIconUrl =
+    'https://storage.googleapis.com/signlydaten/schlange/signly_App_Icon.png';
+  const logoUrl =
+    'https://storage.googleapis.com/signlydaten/schlange/Signly_logo_color_flatt2.png';
   const heroIllustrationUrl = 'https://storage.googleapis.com/signlydaten/schlange/schlange.png';
 
   return `
@@ -249,7 +250,7 @@ export function renderSuccessPageHtml(name: string) {
             <header class="card-header">
               <div class="logo">
                 <img
-                  src="${assetsBaseUrl}/Logo.png"
+                  src="${logoUrl}"
                   alt="Signly Logo"
                   style="height: 60px; width: auto;"
                   loading="eager"
@@ -403,9 +404,12 @@ export function renderSuccessPageHtml(name: string) {
 }
 
 export function renderExpiredPageHtml() {
-  const baseUrl = 'https://backend.signly.at';
-  const assetsBaseUrl = `${baseUrl}/email-assets`;
-  const appIconUrl = `${assetsBaseUrl}/signly_App_Icon.png`;
+  const appIconUrl =
+    'https://storage.googleapis.com/signlydaten/schlange/signly_App_Icon.png';
+  const logoUrl =
+    'https://storage.googleapis.com/signlydaten/schlange/Signly_logo_color_flatt2.png';
+  const sadMascotUrl =
+    'https://storage.googleapis.com/signlydaten/schlange/SchlangeBoese.png';
 
   return `
       <!DOCTYPE html>
@@ -631,7 +635,7 @@ export function renderExpiredPageHtml() {
             <header class="card-header">
               <div class="logo">
                 <img
-                  src="${assetsBaseUrl}/Logo.png"
+                  src="${logoUrl}"
                   alt="Signly Logo"
                   style="height: 60px; width: auto;"
                   loading="eager"
@@ -651,7 +655,7 @@ export function renderExpiredPageHtml() {
             <section class="hero">
               <div class="hero-illustration" aria-hidden="true">
                 <img
-                  src="${assetsBaseUrl}/SchlangeBoese.png"
+                  src="${sadMascotUrl}"
                   alt="Signly Maskottchen"
                   style="max-width: 160px; width: 100%; height: auto; display: block;"
                   loading="eager"

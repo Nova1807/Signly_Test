@@ -7,7 +7,6 @@ import { PassportModule } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { FirebaseModule } from '../firebase/firebase.module';
-import { EmailAssetsController } from './email-assets.controller';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { MailerService } from './mailer.service';
@@ -33,7 +32,7 @@ const imageModerationDefaults: ImageModerationOptions = {
       signOptions: { expiresIn: '1h' },
     }),
   ],
-  controllers: [AuthController, EmailAssetsController],
+  controllers: [AuthController],
   providers: [
     AuthService,
     GoogleStrategy,
