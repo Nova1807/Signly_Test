@@ -843,6 +843,27 @@ export class AuthController {
     return stream.pipe(res);
   }
 
+  @Delete('account')
+  @ApiOperation({ summary: 'Account loeschen' })
+  @ApiBearerAuth()
+  @ApiQuery({
+    name: 'accessToken',
+    required: false,
+    description: 'Access token (alternativ zum Authorization Header)',
+  })
+  @ApiOkResponse({ description: 'Account geloescht', type: SuccessResponseDto })
+  @ApiResponse({ status: 400, description: 'User nicht gefunden' })
+  @ApiResponse({ status: 401, description: 'Access token fehlt oder ungueltig' })
+  async deleteAccount(
+    @Query('accessToken') accessTokenQuery: string | undefined,
+    @Req() req: Request,
+  ) {
+    this.logger.log('deleteAccount called');
+    const accessToken = this.resolveAccessToken(req, accessTokenQuery);
+    const userId = this.resolveUserIdFromToken(accessToken);
+    return this.authService.deleteAccount(userId);
+  }
+
   @Post('friends/request')
   @ApiOperation({ summary: 'Freundschaftsanfrage senden' })
   @ApiBearerAuth()

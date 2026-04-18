@@ -1,4 +1,4 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger, BadRequestException } from '@nestjs/common';
 import { SignupDto } from './dto/signup.dto';
 import * as admin from 'firebase-admin';
 import 'firebase-admin/storage';
@@ -8,7 +8,7 @@ import { MailerService } from './mailer.service';
 import words from './words.json';
 import { UpdateProfileDto } from './update-profile.dto';
 import { ImageModerationService } from './image-moderation.service';
-import { formatLogContext, maskId } from '../common/logging/redaction';
+import { formatLogContext, maskEmail, maskId } from '../common/logging/redaction';
 import { AvatarManager } from './managers/avatar.manager';
 import type { AvatarUploadFile } from './managers/avatar.manager';
 import { FriendshipManager } from './managers/friendship.manager';
@@ -295,6 +295,133 @@ export class AuthService {
   // Profil aktualisieren (Name + AboutMe)
   async updateProfile(userId: string, dto: UpdateProfileDto) {
     return this.accountManager.updateProfile(userId, dto);
+  }
+
+  async deleteAccount(userId: string) {
+    this.logger.log(
+      'deleteAccount start' +
+        formatLogContext({
+          userId: maskId(userId),
+        }),
+    );
+
+    const firestore = this.getFirestore();
+    const userRef = firestore.collection('users').doc(userId);
+    const userDoc = await userRef.get();
+
+    if (!userDoc.exists) {
+      this.logger.warn(
+        'deleteAccount: user not found' +
+          formatLogContext({
+            userId: maskId(userId),
+          }),
+      );
+      throw new BadRequestException('User not found');
+    }
+
+    const userData = userDoc.data() as any;
+    const email = typeof userData?.email === 'string' ? userData.email : undefined;
+    const avatarPath = typeof userData?.avatarPath === 'string' ? userData.avatarPath : undefined;
+
+    if (avatarPath) {
+      try {
+        await this.firebaseApp.storage().bucket().file(avatarPath).delete({ ignoreNotFound: true });
+      } catch (err: any) {
+        this.logger.warn(
+          'deleteAccount: failed to delete avatar from storage' +
+            formatLogContext({
+              userId: maskId(userId),
+              avatarPath,
+              error: err?.message,
+            }),
+        );
+      }
+    }
+
+    const batchSize = 400;
+    const deletedRefreshTokens = await this.deleteQueryInBatches(
+      firestore.collection('refreshTokens').where('userId', '==', userId),
+      batchSize,
+    );
+
+    const deletedPasswordResets = await this.deleteQueryInBatches(
+      firestore.collection('passwordResets').where('userId', '==', userId),
+      batchSize,
+    );
+
+    const deletedFriendRequestsOutgoing = await this.deleteQueryInBatches(
+      firestore
+        .collection(this.friendRequestsCollection)
+        .where('fromUserId', '==', userId),
+      batchSize,
+    );
+
+    const deletedFriendRequestsIncoming = await this.deleteQueryInBatches(
+      firestore
+        .collection(this.friendRequestsCollection)
+        .where('toUserId', '==', userId),
+      batchSize,
+    );
+
+    const deletedFriendshipsA = await this.deleteQueryInBatches(
+      firestore.collection(this.friendshipsCollection).where('userA', '==', userId),
+      batchSize,
+    );
+
+    const deletedFriendshipsB = await this.deleteQueryInBatches(
+      firestore.collection(this.friendshipsCollection).where('userB', '==', userId),
+      batchSize,
+    );
+
+    const deletedEmailVerifications = email
+      ? await this.deleteQueryInBatches(
+          firestore.collection('emailVerifications').where('email', '==', email),
+          batchSize,
+        )
+      : 0;
+
+    await userRef.delete();
+
+    this.logger.log(
+      'deleteAccount finished' +
+        formatLogContext({
+          userId: maskId(userId),
+          email: maskEmail(email),
+          refreshTokensDeleted: deletedRefreshTokens,
+          passwordResetsDeleted: deletedPasswordResets,
+          friendRequestsDeleted: deletedFriendRequestsOutgoing + deletedFriendRequestsIncoming,
+          friendshipsDeleted: deletedFriendshipsA + deletedFriendshipsB,
+          emailVerificationsDeleted: deletedEmailVerifications,
+        }),
+    );
+
+    return { success: true, message: 'Account geloescht' };
+  }
+
+  private async deleteQueryInBatches(
+    query: admin.firestore.Query,
+    batchSize: number,
+  ): Promise<number> {
+    let deleted = 0;
+    const firestore = this.getFirestore();
+
+    while (true) {
+      const snapshot = await query.limit(batchSize).get();
+      if (snapshot.empty) {
+        break;
+      }
+
+      const batch = firestore.batch();
+      snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+      await batch.commit();
+      deleted += snapshot.size;
+
+      if (snapshot.size < batchSize) {
+        break;
+      }
+    }
+
+    return deleted;
   }
 
   /**
