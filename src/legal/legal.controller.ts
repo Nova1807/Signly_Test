@@ -1,12 +1,36 @@
-import { Controller, Get, Header } from '@nestjs/common';
+import { Body, Controller, Get, Header, Post } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiProduces, ApiTags } from '@nestjs/swagger';
+import * as nodemailer from 'nodemailer';
 
 @ApiTags('legal')
 @Controller('legal')
 export class LegalController {
   private readonly supportEmail = 'support@signly.at';
+  private readonly legalLastUpdated = '24.04.2026';
   private readonly logoUrl =
     'https://storage.googleapis.com/signlydaten/schlange/Signly_logo_color_flatt2.png';
+
+  private createBrevoTransport() {
+    const user = process.env.BREVO_SMTP_USER;
+    const pass = process.env.BREVO_SMTP_KEY;
+
+    if (!user || !pass) {
+      throw new Error('Missing Brevo SMTP credentials');
+    }
+
+    return nodemailer.createTransport({
+      host: 'smtp-relay.brevo.com',
+      port: 587,
+      secure: false,
+      auth: { user, pass },
+      requireTLS: true,
+      pool: true,
+      maxConnections: 1,
+      tls: {
+        rejectUnauthorized: false,
+      },
+    });
+  }
 
   private pageShell(params: {
     title: string;
@@ -224,7 +248,7 @@ export class LegalController {
         ${body}
       </section>
 
-      <p class="note">Stand: 16.04.2026</p>
+      <p class="note">Stand: ${this.escapeHtml(this.legalLastUpdated)}</p>
     </div>
   </main>
 </body>
@@ -258,86 +282,142 @@ export class LegalController {
           <p>
             Erik Hauer<br />
             Linzer Straße 456<br />
+            Österreich<br />
             E-Mail: <a href="mailto:${this.supportEmail}">${this.supportEmail}</a>
           </p>
           <p>
             Victoria Kovacic<br />
             E-Mail: <a href="mailto:${this.supportEmail}">${this.supportEmail}</a>
           </p>
-          <p>Signly ist derzeit ein Projekt im Rahmen einer Diplomarbeit und noch kein eingetragenes Unternehmen.</p>
+          <p>
+            Signly wird derzeit als Schul- und Diplomarbeitsprojekt mit inhaltlichem Bezug zu Österreichischer
+            Gebärdensprache betrieben und ist nach aktuellem Stand kein im Firmenbuch eingetragenes Unternehmen.
+          </p>
+          <p>
+            Eine gesetzliche Pflicht zur Benennung einer oder eines Datenschutzbeauftragten besteht nach aktuellem
+            Projektstatus nicht.
+          </p>
         </div>
 
         <div class="section">
-          <h2>2. Verarbeitete Daten</h2>
+          <h2>2. Verarbeitete Datenkategorien</h2>
           <p>Im Rahmen der Nutzung von Signly können insbesondere folgende personenbezogene Daten verarbeitet werden:</p>
           <ul>
             <li>E-Mail-Adresse</li>
-            <li>Benutzername</li>
-            <li>Profilbild</li>
-            <li>Authentifizierungsdaten</li>
+            <li>Name und Benutzername</li>
+            <li>Profilbild und sonstige freiwillige Profilangaben wie "About me"</li>
+            <li>Passwort-Hash, E-Mail-Verifizierungsdaten sowie Passwort-Reset-Daten</li>
+            <li>Authentifizierungs- und Sitzungsdaten, insbesondere Access- und Refresh-Token</li>
+            <li>Technische Metadaten zur Nutzung der bereitgestellten Funktionen</li>
+            <li>Lern-, Fortschritts-, Favoriten-, Wörterbuch- und Freundeslisten-bezogene Daten</li>
+            <li>Daten, die im Rahmen von Google- oder Apple-Login von den jeweiligen Anbietern bereitgestellt werden</li>
+            <li>Inhalte und Kontaktdaten aus Anfragen, die über das Kontaktformular übermittelt werden</li>
           </ul>
         </div>
 
         <div class="section">
-          <h2>3. Zweck der Datenverarbeitung</h2>
-          <p>Die Verarbeitung der Daten erfolgt ausschließlich zur Bereitstellung und technischen Nutzung von Signly.</p>
+          <h2>3. Zwecke der Verarbeitung</h2>
+          <p>Die Verarbeitung erfolgt zur Bereitstellung, Absicherung und Weiterentwicklung von Signly.</p>
           <p>
-            Dies betrifft insbesondere die Registrierung und Anmeldung von Nutzerinnen und Nutzern,
-            die Verwaltung von Benutzerkonten, die Speicherung und Anzeige von Profildaten sowie
-            die Sicherstellung der technischen Funktionalität der Anwendung.
+            Dies umfasst insbesondere die Registrierung und Anmeldung, die Verwaltung von Benutzerkonten,
+            die Zustellung von Verifizierungs- und Passwort-Reset-E-Mails, die Speicherung von Profil- und
+            Lerndaten, die Bereitstellung sozialer Funktionen wie Freundschaften sowie die Missbrauchs-,
+            Sicherheits- und Fehlervermeidung. Kontaktanfragen werden zur Bearbeitung der jeweiligen Anfrage verarbeitet.
           </p>
         </div>
 
         <div class="section">
-          <h2>4. Eingesetzte Dienste</h2>
-          <p>Für den Betrieb von Signly werden externe technische Dienste verwendet.</p>
+          <h2>4. Rechtsgrundlagen</h2>
           <p>
-            Google Firestore wird zur Speicherung von Anwendungsdaten verwendet.
-            Google Cloud Storage wird zur Speicherung von Profilbildern verwendet.
+            Soweit personenbezogene Daten zur Bereitstellung eines Benutzerkontos und der App-Funktionen verarbeitet
+            werden, erfolgt dies auf Grundlage von Art. 6 Abs. 1 lit. b DSGVO.
+          </p>
+          <p>
+            Soweit die Verarbeitung zur technischen Sicherheit, Missbrauchsprävention, Fehleranalyse oder zur
+            stabilen Bereitstellung des Dienstes erforderlich ist, erfolgt sie auf Grundlage von Art. 6 Abs. 1 lit. f DSGVO.
+          </p>
+          <p>
+            Soweit eine Einwilligung erforderlich ist, erfolgt die Verarbeitung auf Grundlage von Art. 6 Abs. 1 lit. a DSGVO.
+            Gesetzliche Aufbewahrungs- oder Offenlegungspflichten werden gegebenenfalls auf Grundlage von Art. 6 Abs. 1 lit. c DSGVO erfüllt.
           </p>
         </div>
 
         <div class="section">
-          <h2>5. Passwörter und Sicherheit</h2>
+          <h2>5. Eingesetzte Dienste und Empfänger</h2>
+          <p>Für den technischen Betrieb von Signly werden externe Dienstleister und Plattformen eingesetzt.</p>
+          <ul>
+            <li>Google Firebase bzw. Google Cloud, insbesondere Firestore und Cloud Storage, zur Speicherung von Anwendungs- und Mediendaten</li>
+            <li>Google OAuth für die Anmeldung mit Google</li>
+            <li>Apple Sign In für die Anmeldung mit Apple</li>
+            <li>Google Cloud Vision SafeSearch zur Prüfung hochgeladener Avatare auf problematische Inhalte</li>
+            <li>Brevo SMTP für den Versand von Verifizierungs- und Passwort-Reset-E-Mails</li>
+          </ul>
           <p>
-            Passwörter dienen ausschließlich der Authentifizierung.
-            Sie dürfen nicht öffentlich angezeigt und nicht im Klartext gespeichert werden.
+            Dabei kann es zu einer Verarbeitung in Staaten außerhalb des Europäischen Wirtschaftsraums kommen.
+            In solchen Fällen erfolgt die Nutzung dieser Anbieter nur auf Grundlage der jeweils einschlägigen
+            datenschutzrechtlichen Voraussetzungen, etwa Angemessenheitsbeschlüssen oder Standardvertragsklauseln.
           </p>
         </div>
 
         <div class="section">
-          <h2>6. Rechtsgrundlage</h2>
+          <h2>6. Speicherdauer</h2>
           <p>
-            Die Verarbeitung personenbezogener Daten erfolgt zur Bereitstellung der App und ihrer Funktionen
-            sowie gegebenenfalls auf Basis einer Einwilligung der Nutzerinnen und Nutzer.
+            Personenbezogene Daten werden nur so lange gespeichert, wie dies für die jeweiligen Zwecke erforderlich ist.
+          </p>
+          <ul>
+            <li>Bestandsdaten des Benutzerkontos grundsätzlich bis zur Löschung des Accounts</li>
+            <li>E-Mail-Verifizierungsdaten derzeit bis zu 15 Minuten</li>
+            <li>Passwort-Reset-Daten derzeit bis zu 1 Stunde</li>
+            <li>Refresh-Tokens derzeit bis zu 3 Tage</li>
+            <li>Profilbilder bis zur Löschung durch die Nutzerin oder den Nutzer beziehungsweise bis zur Account-Löschung</li>
+            <li>Kontaktanfragen grundsätzlich nur so lange, wie dies zur Bearbeitung und Dokumentation der Anfrage erforderlich ist</li>
+          </ul>
+          <p>
+            Soweit gesetzliche Aufbewahrungspflichten bestehen oder Ansprüche geltend gemacht, ausgeübt oder verteidigt
+            werden müssen, kann eine darüber hinausgehende Speicherung erforderlich sein.
           </p>
         </div>
 
         <div class="section">
-          <h2>7. Speicherdauer</h2>
+          <h2>7. Datensicherheit</h2>
           <p>
-            Personenbezogene Daten werden nur so lange gespeichert, wie dies für den Betrieb und die Bereitstellung
-            von Signly erforderlich ist oder gesetzliche Pflichten bestehen.
+            Signly trifft angemessene technische und organisatorische Maßnahmen, um personenbezogene Daten vor
+            Verlust, Missbrauch und unbefugtem Zugriff zu schützen. Passwörter werden nach aktuellem Systemstand
+            nicht im Klartext gespeichert.
           </p>
         </div>
 
         <div class="section">
           <h2>8. Rechte betroffener Personen</h2>
           <p>
-            Betroffene Personen haben im Rahmen der gesetzlichen Bestimmungen insbesondere das Recht auf Auskunft,
-            Berichtigung, Löschung, Einschränkung der Verarbeitung, Datenübertragbarkeit soweit anwendbar
-            und Widerspruch soweit anwendbar.
+            Betroffene Personen haben nach Maßgabe der DSGVO insbesondere das Recht auf Auskunft, Berichtigung,
+            Löschung, Einschränkung der Verarbeitung, Datenübertragbarkeit, Widerspruch sowie auf Widerruf einer
+            erteilten Einwilligung mit Wirkung für die Zukunft.
           </p>
           <p>
-            Anfragen dazu können an <a href="mailto:${this.supportEmail}">${this.supportEmail}</a> gerichtet werden.
+            Zur Ausübung dieser Rechte kann eine Nachricht an
+            <a href="mailto:${this.supportEmail}">${this.supportEmail}</a> gesendet werden.
+          </p>
+          <p>
+            Besteht die Ansicht, dass eine Datenverarbeitung gegen Datenschutzrecht verstößt, kann zudem eine Beschwerde
+            bei der österreichischen Datenschutzbehörde eingebracht werden:
+            <a href="https://www.dsb.gv.at" target="_blank" rel="noopener noreferrer">www.dsb.gv.at</a>.
           </p>
         </div>
 
         <div class="section">
-          <h2>9. Änderungen</h2>
+          <h2>9. Keine ausschließlich automatisierten Entscheidungen</h2>
+          <p>
+            Eine ausschließlich automatisierte Entscheidungsfindung im Sinne von Art. 22 DSGVO findet nach aktuellem
+            Stand nicht statt. Die Avatar-Prüfung dient der Inhaltsmoderation und technischen Missbrauchsprävention.
+          </p>
+        </div>
+
+        <div class="section">
+          <h2>10. Änderungen</h2>
           <p>
             Diese Datenschutzerklärung kann angepasst werden, wenn sich technische, organisatorische oder rechtliche
-            Rahmenbedingungen ändern.
+            Rahmenbedingungen ändern. Maßgeblich ist die jeweils auf dieser Seite veröffentlichte Fassung.
           </p>
         </div>
       `,
@@ -362,6 +442,7 @@ export class LegalController {
           <p>
             Erik Hauer<br />
             Linzer Straße 456<br />
+            Österreich<br />
             E-Mail: <a href="mailto:${this.supportEmail}">${this.supportEmail}</a>
           </p>
           <p>
@@ -377,6 +458,7 @@ export class LegalController {
             Die Anwendung richtet sich aktuell in erster Linie an Nutzerinnen und Nutzer in Österreich
             und bezieht sich derzeit auf Österreichische Gebärdensprache.
           </p>
+          <p>Diese Nutzungsbedingungen gelten für die Nutzung der von Signly bereitgestellten App- und Backend-Funktionen.</p>
         </div>
 
         <div class="section">
@@ -387,6 +469,10 @@ export class LegalController {
           <p>
             Nutzerinnen und Nutzer verpflichten sich, bei der Registrierung richtige Angaben zu machen
             und ihre Zugangsdaten sorgfältig aufzubewahren.
+          </p>
+          <p>
+            Die Nutzung zu rechtswidrigen Zwecken, zur Störung des Betriebs oder zur Umgehung technischer Schutzmaßnahmen
+            ist unzulässig.
           </p>
         </div>
 
@@ -399,6 +485,9 @@ export class LegalController {
           <p>
             Die Betreiber behalten sich vor, Konten bei Missbrauch, falschen Angaben oder technischen
             beziehungsweise organisatorischen Erfordernissen einzuschränken oder zu löschen.
+          </p>
+          <p>
+            Nutzerinnen und Nutzer können ihr Konto im Rahmen der bereitgestellten Funktionen auch selbst löschen.
           </p>
         </div>
 
@@ -421,6 +510,10 @@ export class LegalController {
             Ohne ausdrückliche Zustimmung dürfen Inhalte von Signly nicht kopiert, veröffentlicht,
             bearbeitet oder außerhalb der bestimmungsgemäßen Nutzung verwendet werden.
           </p>
+          <p>
+            Inhalte, die von Nutzerinnen und Nutzern hochgeladen oder eingegeben werden, dürfen keine Rechte Dritter,
+            keine gesetzlichen Vorschriften und keine Persönlichkeitsrechte verletzen.
+          </p>
         </div>
 
         <div class="section">
@@ -442,7 +535,8 @@ export class LegalController {
           </p>
           <p>
             Soweit gesetzlich zulässig, ist die Haftung für leichte Fahrlässigkeit ausgeschlossen.
-            Die Haftung für Vorsatz sowie für Personenschäden bleibt unberührt.
+            Die Haftung für Vorsatz, grobe Fahrlässigkeit, Personenschäden sowie nach zwingenden gesetzlichen Vorschriften
+            bleibt unberührt.
           </p>
         </div>
 
@@ -459,6 +553,10 @@ export class LegalController {
           <p>
             Es gilt österreichisches Recht unter Ausschluss der Verweisungsnormen,
             soweit dem keine zwingenden gesetzlichen Bestimmungen entgegenstehen.
+          </p>
+          <p>
+            Gegenüber Verbraucherinnen und Verbrauchern gelten zwingende Verbraucherschutzvorschriften des jeweiligen
+            gewöhnlichen Aufenthalts unberührt fort, soweit sie anwendbar sind.
           </p>
         </div>
 
@@ -484,10 +582,11 @@ export class LegalController {
         'Angaben zu den verantwortlichen Personen und zur aktuellen Einordnung von Signly als Projekt im Rahmen einer Diplomarbeit.',
       body: `
         <div class="section">
-          <h2>Verantwortliche für den Inhalt</h2>
+          <h2>1. Medieninhaberin, Herausgeberin und für den Inhalt verantwortlich</h2>
           <p>
             Erik Hauer<br />
             Linzer Straße 456<br />
+            Österreich<br />
             E-Mail: <a href="mailto:${this.supportEmail}">${this.supportEmail}</a>
           </p>
           <p>
@@ -497,29 +596,165 @@ export class LegalController {
         </div>
 
         <div class="section">
-          <h2>Projektstatus</h2>
-          <p>Signly ist derzeit ein Schulprojekt im Rahmen einer Diplomarbeit und noch kein eingetragenes Unternehmen.</p>
+          <h2>2. Projektstatus</h2>
+          <p>
+            Signly ist derzeit ein Schulprojekt im Rahmen einer Diplomarbeit und nach aktuellem Stand kein im
+            Firmenbuch eingetragenes Unternehmen.
+          </p>
         </div>
 
         <div class="section">
-          <h2>Inhaltliche Ausrichtung</h2>
-          <p>Signly ist eine Anwendung im Bereich der Österreichischen Gebärdensprache.</p>
+          <h2>3. Unternehmens- bzw. Tätigkeitsgegenstand</h2>
+          <p>Signly ist eine Lern- und Anwendungsplattform im Bereich der Österreichischen Gebärdensprache.</p>
         </div>
 
         <div class="section">
-          <h2>Kontakt</h2>
-          <p>E-Mail: <a href="mailto:${this.supportEmail}">${this.supportEmail}</a></p>
+          <h2>4. Grundlegende Richtung des Mediums (Blattlinie)</h2>
+          <p>
+            Diese Website bzw. Anwendung dient der Information über Signly sowie der Bereitstellung digitaler Funktionen
+            rund um Lernen, Profilverwaltung und Community-Funktionen im Bereich der Österreichischen Gebärdensprache.
+          </p>
         </div>
 
         <div class="section">
-          <h2>Haftung für Inhalte</h2>
+          <h2>5. Kontakt</h2>
+          <p>
+            E-Mail: <a href="mailto:${this.supportEmail}">${this.supportEmail}</a><br />
+            Kontaktformular: <a href="/legal/contact">/legal/contact</a>
+          </p>
+        </div>
+
+        <div class="section">
+          <h2>6. Haftung für Inhalte</h2>
           <p>
             Die Inhalte dieser Anwendung wurden mit größtmöglicher Sorgfalt erstellt.
             Dennoch kann keine Gewähr für die Richtigkeit, Vollständigkeit und Aktualität
             der bereitgestellten Inhalte übernommen werden.
           </p>
         </div>
+
+        <div class="section">
+          <h2>7. Hinweis zu weiteren Pflichtangaben</h2>
+          <p>
+            Angaben wie Firmenbuchnummer, Firmenbuchgericht, UID-Nummer, Aufsichtsbehörde oder Kammerzugehörigkeit
+            werden derzeit nicht angeführt, soweit sie nach dem aktuellen Projektstatus von Signly nicht einschlägig sind.
+          </p>
+        </div>
       `,
     });
+  }
+
+  @Get('contact')
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  getContact(): string {
+    return this.pageShell({
+      title: 'Kontakt',
+      pill: 'Kontakt',
+      ariaLabel: 'Kontaktformular von Signly',
+      subtitle:
+        'Über dieses Formular kannst du Signly direkt kontaktieren. Die übermittelten Angaben werden ausschließlich zur Bearbeitung deiner Anfrage verwendet.',
+      body: `
+        <div class="section">
+          <h2>Kontaktformular</h2>
+          <form method="post" action="/legal/contact" style="display:grid; gap:12px;">
+            <label style="display:grid; gap:6px;">
+              <span>Name</span>
+              <input name="name" type="text" maxlength="120" required
+                style="padding:12px 14px; border:1px solid var(--border-soft); border-radius:12px; font:inherit;" />
+            </label>
+            <label style="display:grid; gap:6px;">
+              <span>E-Mail</span>
+              <input name="email" type="email" maxlength="190" required
+                style="padding:12px 14px; border:1px solid var(--border-soft); border-radius:12px; font:inherit;" />
+            </label>
+            <label style="display:grid; gap:6px;">
+              <span>Nachricht</span>
+              <textarea name="message" rows="7" maxlength="4000" required
+                style="padding:12px 14px; border:1px solid var(--border-soft); border-radius:12px; font:inherit; resize:vertical;"></textarea>
+            </label>
+            <button type="submit"
+              style="width:max-content; padding:12px 18px; border:0; border-radius:12px; background:#0b6b84; color:#fff; font:inherit; cursor:pointer;">
+              Nachricht senden
+            </button>
+          </form>
+        </div>
+      `,
+    });
+  }
+
+  @Post('contact')
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  async submitContact(
+    @Body('name') name: string,
+    @Body('email') email: string,
+    @Body('message') message: string,
+  ): Promise<string> {
+    const safeName = (name || '').trim().slice(0, 120);
+    const safeEmail = (email || '').trim().slice(0, 190);
+    const safeMessage = (message || '').trim().slice(0, 4000);
+
+    if (!safeName || !safeEmail || !safeMessage) {
+      return this.pageShell({
+        title: 'Kontakt',
+        pill: 'Kontakt',
+        ariaLabel: 'Fehler im Kontaktformular von Signly',
+        subtitle: 'Bitte fülle alle Felder aus und versuche es erneut.',
+        body: `
+          <div class="section">
+            <h2>Unvollständige Anfrage</h2>
+            <p>Alle Felder sind erforderlich.</p>
+            <p><a href="/legal/contact">Zurück zum Kontaktformular</a></p>
+          </div>
+        `,
+      });
+    }
+
+    try {
+      const transporter = this.createBrevoTransport();
+      await transporter.sendMail({
+        from: `"Signly Kontaktformular" <${this.supportEmail}>`,
+        replyTo: safeEmail,
+        to: this.supportEmail,
+        subject: `Kontaktanfrage Signly: ${safeName}`,
+        text: [`Name: ${safeName}`, `E-Mail: ${safeEmail}`, '', safeMessage].join('\n'),
+        html: `
+          <p><strong>Name:</strong> ${this.escapeHtml(safeName)}</p>
+          <p><strong>E-Mail:</strong> ${this.escapeHtml(safeEmail)}</p>
+          <p><strong>Nachricht:</strong></p>
+          <p>${this.escapeHtml(safeMessage).replace(/\n/g, '<br />')}</p>
+        `,
+      });
+
+      return this.pageShell({
+        title: 'Kontakt',
+        pill: 'Kontakt',
+        ariaLabel: 'Kontaktformular von Signly',
+        subtitle: 'Deine Nachricht wurde versendet.',
+        body: `
+          <div class="section">
+            <h2>Nachricht gesendet</h2>
+            <p>Vielen Dank. Deine Anfrage wurde an ${this.escapeHtml(this.supportEmail)} übermittelt.</p>
+            <p><a href="/legal/imprint">Zurück zum Impressum</a></p>
+          </div>
+        `,
+      });
+    } catch {
+      return this.pageShell({
+        title: 'Kontakt',
+        pill: 'Kontakt',
+        ariaLabel: 'Fehler beim Kontaktformular von Signly',
+        subtitle: 'Die Nachricht konnte derzeit nicht versendet werden.',
+        body: `
+          <div class="section">
+            <h2>Versand fehlgeschlagen</h2>
+            <p>
+              Bitte versuche es später erneut oder schreibe direkt an
+              <a href="mailto:${this.supportEmail}">${this.supportEmail}</a>.
+            </p>
+            <p><a href="/legal/contact">Zurück zum Kontaktformular</a></p>
+          </div>
+        `,
+      });
+    }
   }
 }
