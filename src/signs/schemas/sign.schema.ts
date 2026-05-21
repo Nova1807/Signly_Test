@@ -4,10 +4,10 @@ import { Document } from 'mongoose';
 @Schema({ timestamps: true })
 export class Sign extends Document {
   @Prop({ required: true, unique: true })
-  name: string;
+  name!: string;
 
   @Prop({ required: true })
-  glbUrl: string;
+  glbUrl!: string;
 
   @Prop()
   description?: string;
@@ -22,13 +22,13 @@ export class Sign extends Document {
   lastModified?: Date;
 
   @Prop({ default: false })
-  needsUpdate: boolean;
+  needsUpdate!: boolean;
 
   @Prop()
   lastChecked?: Date;
 
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt!: Date;
+  updatedAt!: Date;
 }
 
 export const SignSchema = SchemaFactory.createForClass(Sign);
