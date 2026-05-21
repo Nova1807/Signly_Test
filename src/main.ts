@@ -70,14 +70,17 @@ function isValidSwaggerCredentials(authorizationHeader: string | undefined): boo
 }
 
 function swaggerBasicAuthMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const swaggerUsername = process.env.SWAGGER_USERNAME;
-  const swaggerPassword = process.env.SWAGGER_PASSWORD;
+  const credentialPairs = getSwaggerCredentialPairs();
 
-  if (!swaggerUsername || !swaggerPassword) {
-    console.error('Swagger basic auth is not configured. Set SWAGGER_USERNAME and SWAGGER_PASSWORD.');
+  if (credentialPairs.length === 0) {
+    console.error(
+      'Swagger basic auth is not configured. Set SWAGGER_USERNAME/SWAGGER_PASSWORD or SWAGGER_USERNAME_N/SWAGGER_PASSWORD_N.',
+    );
     res
       .status(500)
-      .send('Swagger basic auth is not configured. Set SWAGGER_USERNAME and SWAGGER_PASSWORD.');
+      .send(
+        'Swagger basic auth is not configured. Set SWAGGER_USERNAME/SWAGGER_PASSWORD or SWAGGER_USERNAME_N/SWAGGER_PASSWORD_N.',
+      );
     return;
   }
 
