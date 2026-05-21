@@ -8,7 +8,6 @@ export class GoogleAuthGuard extends AuthGuard('google') {
   // Optionales Logging beim Start des Auth-Flows
   getAuthenticateOptions(): any {
     this.logger.log('Starting Google OAuth flow via GoogleAuthGuard');
-    // Hier könnte man optional zusätzliche Optionen setzen (prompt, accessType, etc.)
     return {};
   }
 }

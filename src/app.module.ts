@@ -8,6 +8,7 @@ import config from './config/config';
 import { FirebaseModule } from './firebase/firebase.module';
 import { PasswordResetModule } from './password-reset/password-reset.module';
 import { LegalModule } from './legal/legal.module';
+import { SignsModule } from './signs/signs.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { LegalModule } from './legal/legal.module';
   AuthModule,
   PasswordResetModule,
   LegalModule,
+  SignsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

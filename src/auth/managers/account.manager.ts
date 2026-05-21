@@ -200,8 +200,9 @@ export class AccountManager {
         message: 'Verifizierungsmail gesendet. Bitte E-Mail innerhalb von 15 Minuten bestätigen.',
       };
     } catch (err) {
-      this.options.logger.error(`signup internal error: ${err?.message}`, err?.stack);
-      throw err;
+      const error = err instanceof Error ? err : new Error(String(err));
+      this.options.logger.error(`signup internal error: ${error.message}`, error.stack);
+      throw error;
     }
   }
 
@@ -288,8 +289,9 @@ export class AccountManager {
               }),
           );
         } catch (delErr) {
+          const error = delErr instanceof Error ? delErr : new Error(String(delErr));
           this.options.logger.warn(
-            `verifyEmailToken: failed to delete token doc: ${delErr?.message}`,
+            `verifyEmailToken: failed to delete token doc: ${error.message}`,
           );
         }
 
@@ -341,8 +343,9 @@ export class AccountManager {
             }),
         );
       } catch (delErr) {
+        const error = delErr instanceof Error ? delErr : new Error(String(delErr));
         this.options.logger.warn(
-          `verifyEmailToken: failed to delete token doc after creating user: ${delErr?.message}`,
+          `verifyEmailToken: failed to delete token doc after creating user: ${error.message}`,
         );
       }
 
@@ -354,7 +357,8 @@ export class AccountManager {
         name,
       };
     } catch (err) {
-      this.options.logger.error(`verifyEmailToken ERROR: ${err?.message}`, err?.stack);
+      const error = err instanceof Error ? err : new Error(String(err));
+      this.options.logger.error(`verifyEmailToken ERROR: ${error.message}`, error.stack);
       return {
         success: false,
         error: 'SERVER_ERROR',
