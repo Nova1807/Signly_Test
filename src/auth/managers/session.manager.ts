@@ -24,6 +24,8 @@ export interface SessionManagerOptions {
 
 export class SessionManager {
   private readonly refreshTokenCleanupBatchSize: number;
+  private readonly accessTokenExpiresIn = '15m';
+  private readonly refreshTokenTtlDays = 60;
   private readonly loginStreakDateFormatter: Intl.DateTimeFormat;
 
   constructor(private readonly options: SessionManagerOptions) {
@@ -318,6 +320,14 @@ export class SessionManager {
         );
       }
 
+      await tokenDoc.ref.delete();
+      this.logger.log(
+        'refreshTokens: used refresh token deleted' +
+          formatLogContext({
+            tokenId: maskId(tokenDoc.id),
+          }),
+      );
+
       const tokens = await this.generateUserToken(token.userId);
       this.logger.log('refreshTokens: new tokens generated');
       return tokens;
@@ -335,7 +345,7 @@ export class SessionManager {
         }),
     );
 
-    const accessToken = this.jwtService.sign({ userId }, { expiresIn: '1h' });
+    const accessToken = this.jwtService.sign({ userId }, { expiresIn: this.accessTokenExpiresIn });
     const refreshToken = uuidv4();
     this.logger.log('generateUserToken: tokens created');
 
@@ -357,7 +367,7 @@ export class SessionManager {
     );
 
     const expiryDate = new Date();
-    expiryDate.setDate(expiryDate.getDate() + 3);
+    expiryDate.setDate(expiryDate.getDate() + this.refreshTokenTtlDays);
 
     const firestore = this.firestore;
     this.logger.log('storeRefreshToken: got firestore instance');

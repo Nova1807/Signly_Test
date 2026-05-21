@@ -23,13 +23,15 @@ const imageModerationDefaults: ImageModerationOptions = {
   defaultThreshold: 'LIKELY',
 };
 
+const accessTokenExpiresIn = '15m';
+
 @Module({
   imports: [
     FirebaseModule,
     PassportModule.register({ defaultStrategy: 'google' }),
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'dev-secret',
-      signOptions: { expiresIn: '1h' },
+      signOptions: { expiresIn: accessTokenExpiresIn },
     }),
   ],
   controllers: [AuthController],
